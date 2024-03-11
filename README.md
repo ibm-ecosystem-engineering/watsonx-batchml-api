@@ -96,3 +96,19 @@ Your application will be running at `http://localhost:3000`.  You can access the
 This sample application is licensed under the Apache License, Version 2. Separate third-party code objects invoked within this code pattern are licensed by their respective providers pursuant to their own separate licenses. Contributions are subject to the [Developer Certificate of Origin, Version 1.1](https://developercertificate.org/) and the [Apache License, Version 2](https://www.apache.org/licenses/LICENSE-2.0.txt).
 
 [Apache License FAQ](https://www.apache.org/foundation/license-faq.html#WhatDoesItMEAN)
+
+## Services
+
+### Public APIs
+
+- Upload CSV document
+- Download original CSV document
+- Download processed CSV document
+- List CSV documents
+- Get CSV document details
+- Subscribe to CSV document updates
+
+### Internal APIs
+
+- Batch process CSV document
+- Schema mapping

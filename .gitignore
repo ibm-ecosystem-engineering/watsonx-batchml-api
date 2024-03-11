@@ -12,3 +12,4 @@ test-report.xml
 # Chart dependencies
 **/charts/*.tgz
 Chart.lock
+.env

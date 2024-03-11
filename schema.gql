@@ -2,11 +2,77 @@
 # THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
 # ------------------------------------------------------
 
+"""CSV Document"""
+type CsvDocument {
+  description: String!
+  id: ID!
+  name: String!
+  originalUrl: String!
+  performance: PerformanceSummary
+  predictField: String!
+  processedUrl: String
+  status: CsvDocumentStatus!
+}
+
+"""Csv Document Record"""
+type CsvDocumentRecord {
+  confidence: Float
+  data: String!
+  documentId: String!
+  id: String!
+  predictionValue: String
+  providedValue: String!
+}
+
+"""Csv document statuses"""
+enum CsvDocumentStatus {
+  Completed
+  Deleted
+  Error
+  InProgress
+}
+
+"""Csv document statuses"""
+enum CsvDocumentStatusFilter {
+  All
+  Completed
+  Deleted
+  Error
+  InProgress
+}
+
 """greeting"""
 type Greeting {
   greeting: String!
 }
 
+type Mutation {
+  deleteCsvDocument(id: ID!): Record!
+}
+
+"""Performance Summary"""
+type PerformanceSummary {
+  agreeAboveThreshold: Float!
+  agreeBelowThreshold: Float!
+  confidenceThreshold: Float!
+  disagreeAboveThreshold: Float!
+  disagreeBelowThreshold: Float!
+  totalCount: Float!
+}
+
 type Query {
+  getCsvDocumentRecords(id: ID!): CsvDocumentRecord!
+  getCvsDocumentDetails(id: ID!): CsvDocument!
+  getDocumentPerformanceSummary(id: ID!): PerformanceSummary!
   helloWorld: Greeting!
+  listCsvDocuments(status: CsvDocumentStatusFilter): [CsvDocument!]!
+}
+
+"""Record"""
+type Record {
+  id: String!
+}
+
+type Subscription {
+  subscribeToCsvDocumentUpdates: CsvDocument!
 }
