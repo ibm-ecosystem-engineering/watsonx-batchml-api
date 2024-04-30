@@ -23,13 +23,10 @@ export class CsvDocument implements CsvDocumentModel {
     @Field()
     originalUrl: string;
 
-    @Field({nullable: true})
-    processedUrl?: string;
-
     @Field()
     name: string;
 
-    @Field()
+    @Field({nullable: true})
     description: string;
 
     @Field()
@@ -94,6 +91,8 @@ export class CsvPrediction implements CsvPredictionModel {
     model: string;
     @Field()
     date: string;
+    @Field()
+    predictionUrl: string;
     @Field(() => [CsvPredictionResult])
     predictions: CsvPredictionResultModel[];
     @Field(() => PerformanceSummary)

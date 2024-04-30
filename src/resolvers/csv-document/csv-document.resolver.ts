@@ -53,10 +53,10 @@ export class CsvDocumentResolver {
     }
 
     @Query(returns =>  CsvDocumentRecord)
-    async getCsvDocumentRecords(
+    async listCsvDocumentRecords(
         @Args('id', { type: () => ID }) id: string
     ): Promise<CsvDocumentRecordModel[]> {
-        return this.service.getCsvDocumentRecords(id)
+        return this.service.listCsvDocumentRecords(id)
     }
 
     @Query(returns =>  [CsvPrediction])
@@ -75,9 +75,10 @@ export class CsvDocumentResolver {
 
     @Mutation(returns => CsvPrediction)
     async createCsvPrediction(
-        @Args('id', { type: () => ID }) id: string
+        @Args('id', { type: () => ID }) id: string,
+        @Args('model', {type: () => String, nullable: true}) model?: string,
     ): Promise<CsvPredictionModel> {
-        return this.processor.createCsvPrediction(id)
+        return this.processor.createCsvPrediction(id, model)
     }
 
     @Subscription(() => CsvDocument)

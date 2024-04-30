@@ -4,7 +4,7 @@ import {Collection, Db, GridFSBucket, ObjectId, OptionalId, WithId} from "mongod
 import {CsvDocumentApi, CsvDocumentPredictionResult} from "./csv-document.api";
 import {
     bufferToStream,
-    buildOriginalUrl,
+    buildOriginalUrl, buildPredictionUrl,
     EventManager,
     parseDocumentRows,
     PerformanceSummary,
@@ -60,13 +60,16 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
         const document: CsvDocumentModel = await this.insertCsvDocument(input);
 
         // upload file
+        console.log('Uploding CSV file to database')
         await this.uploadCsvFile(file, document);
 
         // insert records
+        console.log('Parsing rows from CSV doc')
         const rows: CsvDocumentRecordModel[] = await parseDocumentRows(
             document.id,
             document.predictField,
             file)
+        console.log('Inserting csv rows: ' + rows.length)
         await this.documentRecords.insertMany(rows)
 
         return documentEvents.add(document)
@@ -82,7 +85,7 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
                         name: document.name,
                     }
                 }))
-                .on('end', () => resolve(true))
+                .on('finish', () => resolve(true))
                 .on('error', err => reject(err))
         })
     }
@@ -110,7 +113,7 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
             });
     }
 
-    async getCsvDocumentRecords(documentId: string): Promise<CsvDocumentRecordModel[]> {
+    async listCsvDocumentRecords(documentId: string): Promise<CsvDocumentRecordModel[]> {
         return await this.documentRecords
             .find({documentId})
             .toArray()
@@ -216,6 +219,7 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
                 {
                     id: prediction._id.toString(),
                     date: prediction.date.toISOString(),
+                    predictionUrl: buildPredictionUrl(documentId, prediction._id.toString()),
                     predictions: []
                 })
             )

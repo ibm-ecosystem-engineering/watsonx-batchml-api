@@ -34,7 +34,7 @@ export abstract class CsvDocumentApi {
     abstract deleteCsvDocument(id: string): Promise<{id: string}>
     abstract getOriginalCsvDocument(id: string): Promise<{filename: string, buffer: Buffer}>
 
-    abstract getCsvDocumentRecords(documentId: string): Promise<CsvDocumentRecordModel[]>
+    abstract listCsvDocumentRecords(documentId: string): Promise<CsvDocumentRecordModel[]>
 
     abstract addCsvDocumentPrediction(documentId: string, prediction: CsvDocumentPredictionResult): Promise<CsvPredictionModel>
     abstract listCsvPredictions(documentId: string): Promise<CsvPredictionModel[]>

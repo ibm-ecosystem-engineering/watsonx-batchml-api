@@ -25,12 +25,12 @@ export class CsvDocumentProcessor implements CsvDocumentProcessorApi {
             .then(() => true)
     }
 
-    async createCsvPrediction(id: string): Promise<CsvPredictionModel> {
-        const data: CsvDocumentRecordModel[] = await this.service.getCsvDocumentRecords(id)
+    async createCsvPrediction(documentId: string, model?: string): Promise<CsvPredictionModel> {
+        const data: CsvDocumentRecordModel[] = await this.service.listCsvDocumentRecords(documentId)
 
-        const prediction: BatchPredictionResult = await this.predictorService.predictValues(data)
+        const prediction: BatchPredictionResult = await this.predictorService.predictValues(data, model)
 
         return this.service
-            .addCsvDocumentPrediction(id, prediction)
+            .addCsvDocumentPrediction(documentId, prediction)
     }
 }

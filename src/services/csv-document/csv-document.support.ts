@@ -21,7 +21,7 @@ export const parseDocumentRows = async (documentId: string, predictField: string
 export const parseCsv = async <T>(csvContents: Buffer): Promise<T[]> => {
     const parser = parse({
         delimiter: ',',
-        columns: (record: string) => record.split(',').map(val => val.trim()),
+        columns: (headers: string[]) => headers.map(val => val.trim()),
         skip_empty_lines: true,
     });
 
@@ -52,6 +52,12 @@ const parseCsvStream = async <T = any>(parser: Parser, stream: Stream): Promise<
         });
 
         parser.on('end', function(){
+            console.log('End csv parser')
+            resolve(records)
+        });
+
+        parser.on('finish', function(){
+            console.log('Finish csv parser')
             resolve(records)
         });
 
@@ -60,7 +66,11 @@ const parseCsvStream = async <T = any>(parser: Parser, stream: Stream): Promise<
 }
 
 export const buildOriginalUrl = (documentId: string, name: string): string => {
-    return 'original' // TODO fix
+    return `/file/document/${documentId}/${name}`
+}
+
+export const buildPredictionUrl = (documentId: string, predictionId: string): string => {
+    return `/file/document/${documentId}/prediction/${predictionId}/result.csv`
 }
 
 export class PerformanceSummary implements PerformanceSummaryModel {
