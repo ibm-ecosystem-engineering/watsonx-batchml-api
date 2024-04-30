@@ -5,8 +5,8 @@ import {CsvDocumentInputModel, CsvDocumentModel, CsvDocumentStatus, PerformanceS
 export class CsvDocumentInput implements CsvDocumentInputModel {
     @ApiProperty()
     name: string;
-    @ApiProperty()
-    description: string;
+    @ApiProperty({nullable: true})
+    description?: string;
     @ApiProperty()
     predictField: string;
 }

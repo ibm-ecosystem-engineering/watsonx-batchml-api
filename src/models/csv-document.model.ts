@@ -2,7 +2,7 @@ import {MachineLearningResultModel} from "./machine-learning-result.model";
 
 export interface CsvDocumentInputModel {
     name: string;
-    description: string;
+    description?: string;
     predictField: string;
 }
 
@@ -10,7 +10,6 @@ export interface CsvDocumentModel extends CsvDocumentInputModel {
     id: string;
     status: CsvDocumentStatus;
     originalUrl: string;
-    processedUrl?: string;
 }
 
 export const isCsvDocumentModel = (val: unknown): val is CsvDocumentModel => {
@@ -69,6 +68,7 @@ export interface CsvPredictionModel {
     documentId: string;
     model: string;
     date: string;
+    predictionUrl: string;
     predictions: CsvPredictionResultModel[];
     performanceSummary: PerformanceSummaryModel;
 }

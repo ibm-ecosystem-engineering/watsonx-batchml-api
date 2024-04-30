@@ -33,6 +33,10 @@ interface PredictionPayload {
     input_data: PredictionPayloadData[];
 }
 
+interface PredictionsResult {
+    predictions: PredictionPayloadData[]
+}
+
 interface PredictionPayloadData {
     fields: string[];
     values: string[][];
@@ -66,15 +70,14 @@ export class WatsonxMl {
         const client = await this.getClient()
 
         return client
-            .post<PredictionPayloadData>(this.buildUrl(deploymentId), this.buildPayload(input, deploymentFields))
-            .then(result => {
-                return result.data
-            })
-            .then((data: PredictionPayloadData) => {
+            .post<PredictionsResult>(this.buildUrl(deploymentId), this.buildPayload(input, deploymentFields))
+            .then(result => result.data.predictions)
+            .then((data: PredictionPayloadData[]) => data.reduce((result: string[][], current: PredictionPayloadData) => result.concat(...current.values), []))
+            .then((data: string[][]) => {
                 return {
                     model: deploymentId,
                     date: new Date(),
-                    results: data.values
+                    results: data
                         .map<PredictionValue>((val: string[]) => ({
                             prediction: val[0],
                             confidence: calculateConfidence(val[1] as unknown as number[])

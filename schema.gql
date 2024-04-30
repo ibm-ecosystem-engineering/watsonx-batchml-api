@@ -4,13 +4,11 @@
 
 """CSV Document"""
 type CsvDocument {
-  description: String!
+  description: String
   id: ID!
   name: String!
   originalUrl: String!
-  performance: PerformanceSummary
   predictField: String!
-  processedUrl: String
   status: CsvDocumentStatus!
 }
 
@@ -41,12 +39,35 @@ enum CsvDocumentStatusFilter {
   InProgress
 }
 
+"""CSV Prediction"""
+type CsvPrediction {
+  date: String!
+  documentId: String!
+  id: ID!
+  model: String!
+  performanceSummary: PerformanceSummary!
+  predictionUrl: String!
+  predictions: [CsvPredictionResult!]!
+}
+
+"""CSV Prediction Result"""
+type CsvPredictionResult {
+  confidence: Float!
+  csvRecordId: String!
+  documentId: String!
+  id: ID!
+  predictionId: String!
+  predictionValue: String!
+  providedValue: String!
+}
+
 """greeting"""
 type Greeting {
   greeting: String!
 }
 
 type Mutation {
+  createCsvPrediction(id: ID!, model: String): CsvPrediction!
   deleteCsvDocument(id: ID!): Record!
 }
 
@@ -61,18 +82,19 @@ type PerformanceSummary {
 }
 
 type Query {
-  getCsvDocumentRecords(id: ID!): CsvDocumentRecord!
-  getCvsDocumentDetails(id: ID!): CsvDocument!
-  getDocumentPerformanceSummary(id: ID!): PerformanceSummary!
+  getCvsDocument(id: ID!): CsvDocument!
   helloWorld: Greeting!
+  listCsvDocumentRecords(id: ID!): CsvDocumentRecord!
   listCsvDocuments(status: CsvDocumentStatusFilter): [CsvDocument!]!
+  listCsvPredictions(id: ID!): [CsvPrediction!]!
 }
 
 """Record"""
 type Record {
-  id: String!
+  id: ID!
 }
 
 type Subscription {
-  subscribeToCsvDocumentUpdates: CsvDocument!
+  observeCsvDocumentUpdates: CsvDocument!
+  observeCsvPredictionUpdates: CsvPrediction!
 }

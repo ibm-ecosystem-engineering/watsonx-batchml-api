@@ -14,8 +14,8 @@ import {FileInterceptor} from "@nestjs/platform-express";
 
 import {CsvDocumentInput} from "./csv-document.apitypes";
 import {CsvDocument} from "../../graphql-types";
-import {CsvDocumentApi, isDocumentNotFound} from "../../services";
 import {CsvDocumentModel} from "../../models";
+import {CsvDocumentApi, isDocumentNotFound} from "../../services";
 
 @Controller('csv-document')
 @ApiTags('csv-document')
@@ -35,9 +35,16 @@ export class CsvDocumentController {
     })
     async submitCsvDocument(@Body() input: CsvDocumentInput, @UploadedFile() file?: Express.Multer.File): Promise<CsvDocumentModel> {
 
+        console.log('Received CSV document')
+
         return this.service.addCsvDocument(input, file)
+            .then((result) => {
+                console.log('Document upload complete')
+                return result
+            })
             .catch(err => {
-                throw new HttpException('Error adding case', HttpStatus.INTERNAL_SERVER_ERROR)
+                console.error('Error adding CSV document: ', err)
+                throw new HttpException('Error adding CSV document', HttpStatus.INTERNAL_SERVER_ERROR)
             })
     }
 
