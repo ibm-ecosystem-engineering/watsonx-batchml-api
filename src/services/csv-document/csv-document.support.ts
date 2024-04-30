@@ -1,4 +1,4 @@
-import {Options, parse, Parser} from 'csv-parse';
+import {parse, Parser} from 'csv-parse';
 import {PassThrough, Stream} from 'stream';
 
 import {CsvDocumentEventAction, CsvDocumentRecordModel, PerformanceSummaryModel} from "../../models";
@@ -66,11 +66,11 @@ const parseCsvStream = async <T = any>(parser: Parser, stream: Stream): Promise<
 }
 
 export const buildOriginalUrl = (documentId: string, name: string): string => {
-    return `/file/document/${documentId}/${name}`
+    return `/csv-document/${documentId}/${name}`
 }
 
 export const buildPredictionUrl = (documentId: string, predictionId: string): string => {
-    return `/file/document/${documentId}/prediction/${predictionId}/result.csv`
+    return `/csv-document/${documentId}/prediction/${predictionId}/result.csv`
 }
 
 export class PerformanceSummary implements PerformanceSummaryModel {

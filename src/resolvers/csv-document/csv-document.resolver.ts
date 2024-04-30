@@ -46,13 +46,13 @@ export class CsvDocumentResolver {
     }
 
     @Query(returns => CsvDocument)
-    async getCvsDocument(
+    async getCsvDocument(
         @Args('id', { type: () => ID }) id: string
     ): Promise<CsvDocumentModel> {
-        return this.service.getCvsDocument(id)
+        return this.service.getCsvDocument(id)
     }
 
-    @Query(returns =>  CsvDocumentRecord)
+    @Query(returns =>  [CsvDocumentRecord])
     async listCsvDocumentRecords(
         @Args('id', { type: () => ID }) id: string
     ): Promise<CsvDocumentRecordModel[]> {

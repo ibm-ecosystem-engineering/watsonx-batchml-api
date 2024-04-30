@@ -114,8 +114,9 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
     }
 
     async listCsvDocumentRecords(documentId: string): Promise<CsvDocumentRecordModel[]> {
-        return await this.documentRecords
+        return this.documentRecords
             .find({documentId})
+            .map(record => Object.assign({}, record, {id: record._id.toString()}))
             .toArray()
     }
 
@@ -178,7 +179,7 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
         return result.toArray()
     }
 
-    async getCvsDocument(id: string): Promise<CsvDocumentModel> {
+    async getCsvDocument(id: string): Promise<CsvDocumentModel> {
 
         const result = await this.documents.findOne(new ObjectId(id))
 

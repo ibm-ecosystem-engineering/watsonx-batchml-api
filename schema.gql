@@ -82,9 +82,9 @@ type PerformanceSummary {
 }
 
 type Query {
-  getCvsDocument(id: ID!): CsvDocument!
+  getCsvDocument(id: ID!): CsvDocument!
   helloWorld: Greeting!
-  listCsvDocumentRecords(id: ID!): CsvDocumentRecord!
+  listCsvDocumentRecords(id: ID!): [CsvDocumentRecord!]!
   listCsvDocuments(status: CsvDocumentStatusFilter): [CsvDocument!]!
   listCsvPredictions(id: ID!): [CsvPrediction!]!
 }
