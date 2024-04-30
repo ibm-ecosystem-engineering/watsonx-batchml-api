@@ -71,17 +71,17 @@ export class WatsonxMl {
 
         return client
             .post<PredictionsResult>(this.buildUrl(deploymentId), this.buildPayload(input, deploymentFields))
-            .then(result => result.data.predictions)
-            .then((data: PredictionPayloadData[]) => data.reduce((result: string[][], current: PredictionPayloadData) => result.concat(...current.values), []))
-            .then((data: string[][]) => {
+            .then(result => {
+                return result.data.predictions
+            })
+            .then(predictionResultToPredictionValues)
+            .then((data: PredictionValue[]) => {
+                console.log('Got predictions: ', data)
+
                 return {
                     model: deploymentId,
                     date: new Date(),
                     results: data
-                        .map<PredictionValue>((val: string[]) => ({
-                            prediction: val[0],
-                            confidence: calculateConfidence(val[1] as unknown as number[])
-                        }))
                 }
             })
     }
@@ -115,4 +115,17 @@ const flatten = <T>(fields: string[]) => {
 
 const calculateConfidence = (probability: number[]): number => {
     return first(probability.sort((a, b) => b - a))
+}
+
+const predictionResultToPredictionValues = (payload: PredictionPayloadData[]): PredictionValue[] => {
+
+    return payload.reduce((result: PredictionValue[], current: PredictionPayloadData) => {
+
+        const values: PredictionValue[] = current.values.map((val: string[]) => ({
+            prediction: val[0],
+            confidence: calculateConfidence(val[1] as unknown as number[])
+        }))
+
+        return result.concat(values)
+    }, [])
 }

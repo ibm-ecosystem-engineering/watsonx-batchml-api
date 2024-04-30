@@ -48,7 +48,7 @@ export class CsvDocumentController {
             })
     }
 
-    @Get(':id')
+    @Get(':id/:name')
     @ApiOperation({
         operationId: 'get-csv-document',
         summary: 'Get csv document',
@@ -58,14 +58,53 @@ export class CsvDocumentController {
         name: 'id',
         description: 'The id of the document'
     })
+    @ApiParam({
+        name: 'name',
+        description: 'The name of the document'
+    })
     @ApiOkResponse({
         type: CsvDocument,
         description: "Returns selected document"
     })
-    async getCsvDocument(@Param('id') id: string): Promise<CsvDocumentModel> {
+    async getCsvDocument(@Param('id') id: string, @Param('name') name: string): Promise<CsvDocumentModel> {
         console.log('Getting csv document: ' + id);
 
-        return this.service.getCvsDocument(id)
+        return this.service.getCsvDocument(id)
+            .catch(err => {
+                throw isDocumentNotFound(err)
+                    ? new HttpException(err.message, HttpStatus.NOT_FOUND)
+                    : new HttpException(`Error retrieving case: ${id}`, HttpStatus.INTERNAL_SERVER_ERROR)
+            })
+
+    }
+
+
+    @Get(':id/prediction/:predictionId/:name')
+    @ApiOperation({
+        operationId: 'get-csv-prediction-document',
+        summary: 'Get csv prediction document',
+        description: 'Get the csv prediction document'
+    })
+    @ApiParam({
+        name: 'id',
+        description: 'The id of the document'
+    })
+    @ApiParam({
+        name: 'predictionId',
+        description: 'The id of the prediction'
+    })
+    @ApiParam({
+        name: 'name',
+        description: 'The name of the document'
+    })
+    @ApiOkResponse({
+        type: CsvDocument,
+        description: "Returns selected document"
+    })
+    async getCsvPredictionDocument(@Param('id') id: string, @Param('predictionId') predictionId: string, @Param('name') name: string): Promise<CsvDocumentModel> {
+        console.log('Getting csv prediction document: ' + id + ', ' + predictionId);
+
+        return this.service.getCsvDocument(id)
             .catch(err => {
                 throw isDocumentNotFound(err)
                     ? new HttpException(err.message, HttpStatus.NOT_FOUND)
