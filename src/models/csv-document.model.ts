@@ -80,6 +80,7 @@ export interface CsvPredictionResultModel {
     csvRecordId: string;
     providedValue: string;
     predictionValue: string;
+    agree: boolean;
     confidence: number;
 }
 
@@ -109,4 +110,11 @@ export enum CsvDocumentEventAction {
 export interface CsvDocumentEventModel<T extends {id: string} = {id: string}> {
     target: T;
     action: CsvDocumentEventAction;
+}
+
+export enum CsvPredictionRecordFilter {
+    All = 'All',
+    AllDisagree = 'AllDisagree',
+    AllBelowConfidence = 'AllBelowConfidence',
+    DisagreeBelowConfidence = 'DisagreeBelowConfidence'
 }

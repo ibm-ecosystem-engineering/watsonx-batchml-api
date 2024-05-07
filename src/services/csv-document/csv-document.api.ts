@@ -4,7 +4,7 @@ import {
     CsvDocumentEventModel,
     CsvDocumentInputModel,
     CsvDocumentModel, CsvDocumentRecordModel,
-    CsvDocumentStatus, CsvPredictionModel,
+    CsvDocumentStatus, CsvPredictionModel, CsvPredictionRecordFilter, CsvPredictionResultModel,
     PerformanceSummaryModel
 } from "../../models";
 import {BatchPredictionValue} from "../batch-predictor";
@@ -27,6 +27,10 @@ export interface CsvDocumentPredictionResult {
     results: BatchPredictionValue[];
 }
 
+export interface CsvPredictionRecordOptionsModel {
+    filter?: CsvPredictionRecordFilter
+}
+
 export abstract class CsvDocumentApi {
     abstract addCsvDocument(input: CsvDocumentInputModel, file: {filename: string, buffer: Buffer}): Promise<CsvDocumentModel>
     abstract listCsvDocuments(status?: CsvDocumentStatus): Promise<CsvDocumentModel[]>
@@ -39,6 +43,9 @@ export abstract class CsvDocumentApi {
     abstract addCsvDocumentPrediction(documentId: string, prediction: CsvDocumentPredictionResult): Promise<CsvPredictionModel>
     abstract listCsvPredictions(documentId: string): Promise<CsvPredictionModel[]>
     abstract getPredictionPerformanceSummary(predictionId: string): Promise<PerformanceSummaryModel>
+    abstract listPredictionRecords(predictionId: string, options?: CsvPredictionRecordOptionsModel): Promise<CsvPredictionResultModel[]>
+    abstract getPredictionDocument(id: string, predictionId: string, name: string): Promise<{buffer: Buffer, filename: string}>
+    abstract getCsvPrediction(predictionId: string): Promise<CsvPredictionModel>
 
     abstract observeCsvDocumentUpdates(): Observable<CsvDocumentEventModel>
     abstract observeCsvPredictionUpdates(): Observable<{action: CsvDocumentEventAction, target: CsvPredictionModel}>
