@@ -1,10 +1,12 @@
+import {parse as parsePath} from 'path';
 import {Observable} from "rxjs";
 import {Collection, Db, GridFSBucket, ObjectId, OptionalId, WithId} from "mongodb";
 
-import {CsvDocumentApi, CsvDocumentPredictionResult} from "./csv-document.api";
+import {CsvDocumentApi, CsvDocumentPredictionResult, CsvPredictionRecordOptionsModel} from "./csv-document.api";
 import {
     bufferToStream,
-    buildOriginalUrl, buildPredictionUrl,
+    buildOriginalUrl,
+    buildPredictionUrl,
     EventManager,
     parseDocumentRows,
     PerformanceSummary,
@@ -17,10 +19,11 @@ import {
     CsvDocumentRecordModel,
     CsvDocumentStatus,
     CsvPredictionModel,
+    CsvPredictionRecordFilter,
     CsvPredictionResultModel,
     PerformanceSummaryModel
 } from "../../models";
-import {streamToBuffer} from "../../util";
+import {first, streamToBuffer} from "../../util";
 import {BatchPredictionValue} from "../batch-predictor";
 
 interface InternalCsvDocumentModel extends CsvDocumentInputModel {
@@ -61,7 +64,7 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
 
         // upload file
         console.log('Uploding CSV file to database')
-        await this.uploadCsvFile(file, document);
+        const filename = await this.uploadCsvFile(file, document);
 
         // insert records
         console.log('Parsing rows from CSV doc')
@@ -75,17 +78,19 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
         return documentEvents.add(document)
     }
 
-    private uploadCsvFile(file: { filename: string; buffer: Buffer }, document: CsvDocumentModel) {
-        return new Promise<boolean>((resolve, reject) => {
+    private uploadCsvFile(file: { filename: string; buffer: Buffer }, document: CsvDocumentModel): Promise<string | undefined> {
+        return new Promise<string | undefined>((resolve, reject) => {
+            const filename = `${document.id}-original.csv`
+
             bufferToStream(file.buffer)
-                .pipe(this.bucket.openUploadStream(`${document.id}-original.csv`, {
+                .pipe(this.bucket.openUploadStream(filename, {
                     chunkSizeBytes: 1048576,
                     metadata: {
                         documentId: document.id,
                         name: document.name,
                     }
                 }))
-                .on('finish', () => resolve(true))
+                .on('finish', () => resolve(filename))
                 .on('error', err => reject(err))
         })
     }
@@ -114,6 +119,7 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
     }
 
     async listCsvDocumentRecords(documentId: string): Promise<CsvDocumentRecordModel[]> {
+
         return this.documentRecords
             .find({documentId})
             .map(record => Object.assign({}, record, {id: record._id.toString()}))
@@ -151,7 +157,7 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
     async getOriginalCsvDocument(id: string): Promise<{filename: string, buffer: Buffer}> {
         const document = await this.documents.findOne(new ObjectId(id))
 
-        const fileId = `${document._id}-${document.name}`
+        const fileId = `${document._id}-original.csv`
 
         const buffer = await streamToBuffer(this.bucket.openDownloadStreamByName(fileId))
 
@@ -203,11 +209,70 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
         return documentEvents.observable();
     }
 
+    async listPredictionRecords(predictionId: string, {filter}: CsvPredictionRecordOptionsModel = {}): Promise<CsvPredictionResultModel[]> {
+
+        const query: Partial<{[k in keyof CsvPredictionResultModel]: unknown}> = {predictionId}
+
+        if (filter === CsvPredictionRecordFilter.DisagreeBelowConfidence || filter === CsvPredictionRecordFilter.AllBelowConfidence) {
+            query['confidence'] = {$lt: confidenceThreshold}
+        }
+        if (filter === CsvPredictionRecordFilter.AllDisagree || filter === CsvPredictionRecordFilter.DisagreeBelowConfidence) {
+            query['agree'] = false
+        }
+
+        return this.predictionRecords
+            .find(query)
+            .map((predictionResult: WithId<CsvPredictionResultModel>) => Object.assign({}, predictionResult, {id: predictionResult._id.toString()}))
+            .toArray()
+    }
+
     async listCsvPredictions(documentId: string): Promise<CsvPredictionModel[]> {
 
         return this.findPredictions(documentId)
             .then(results => this.populatePredictionRecords(documentId, results))
             .then(results => this.populatePerformanceSummary(results))
+    }
+
+    async getCsvPrediction(predictionId: string): Promise<CsvPredictionModel> {
+        const result = await this.predictions.findOne(new ObjectId(predictionId))
+
+        return Object.assign({}, result, {id: result._id})
+    }
+
+    async getPredictionDocument(id: string, predictionId: string): Promise<{buffer: Buffer, filename: string}> {
+        const document = await this.getCsvDocument(id)
+        const prediction = await this.getCsvPrediction(predictionId)
+        // TODO optimize query
+        const documentRecords = await this.listCsvDocumentRecords(id)
+        const predictionRecords = await this.listPredictionRecords(predictionId)
+
+        const values = predictionRecords.map(val => {
+            const docRecord: CsvDocumentRecordModel | undefined = first(documentRecords.filter(doc => doc.id === val.csvRecordId))
+
+            if (!docRecord) {
+                console.log('Unable to find matching document record: ' + val.csvRecordId)
+                return undefined
+            }
+
+            return Object.assign({}, JSON.parse(docRecord.data), {predictionValue: val.predictionValue, confidence: val.confidence})
+        })
+
+        const name = parsePath(document.name).name
+        const filename = `${name}-${prediction.model}.csv`
+
+        if (values.length === 0) {
+            return {filename, buffer: Buffer.from('')}
+        }
+
+        const keys: string[] = Object.keys(values[0])
+
+        const buffer = values.reduce((result: Buffer, current: any) => {
+            const row: Buffer = Buffer.from(keys.map(key => '"' + current[key] + '"').join(',') + '\n');
+
+            return Buffer.concat([result, row])
+        }, Buffer.from(keys.map(val => '"' + val + '"').join(',') + '\n'))
+
+        return {buffer, filename}
     }
 
     private async findPredictions(documentId: string): Promise<CsvPredictionModel[]> {
@@ -301,6 +366,7 @@ const predictionResultToMongodbPredictionResult = (documentId: string, predictio
         predictionValue: result.prediction,
         confidence: result.confidence,
         providedValue: result.providedValue,
+        agree: result.prediction === result.providedValue,
         csvRecordId: result.csvRecordId,
         documentId,
         predictionId,

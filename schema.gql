@@ -50,8 +50,21 @@ type CsvPrediction {
   predictions: [CsvPredictionResult!]!
 }
 
+"""Filter for csv prediction records"""
+enum CsvPredictionRecordFilter {
+  All
+  AllDisagree
+  DisagreeLowConfidence
+}
+
+"""CSV Prediction Result"""
+input CsvPredictionRecordOptions {
+  filter: CsvPredictionRecordFilter!
+}
+
 """CSV Prediction Result"""
 type CsvPredictionResult {
+  agree: Boolean
   confidence: Float!
   csvRecordId: String!
   documentId: String!
@@ -83,9 +96,11 @@ type PerformanceSummary {
 
 type Query {
   getCsvDocument(id: ID!): CsvDocument!
+  getCsvPrediction(id: ID!): [CsvPrediction!]!
   helloWorld: Greeting!
   listCsvDocumentRecords(id: ID!): [CsvDocumentRecord!]!
   listCsvDocuments(status: CsvDocumentStatusFilter): [CsvDocument!]!
+  listCsvPredictionRecords(id: ID!, options: CsvPredictionRecordOptions): [CsvPredictionResult!]!
   listCsvPredictions(id: ID!): [CsvPrediction!]!
 }
 

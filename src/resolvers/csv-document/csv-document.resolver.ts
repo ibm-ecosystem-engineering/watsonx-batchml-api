@@ -1,16 +1,24 @@
 import {Args, ID, Mutation, Query, Resolver, Subscription} from "@nestjs/graphql";
-import {CsvDocument, CsvDocumentRecord, CsvPrediction, PerformanceSummary, Record} from "../../graphql-types";
+import {
+    CsvDocument,
+    CsvDocumentRecord,
+    CsvPrediction,
+    CsvPredictionRecordOptions,
+    CsvPredictionResult,
+    Record
+} from "../../graphql-types";
 import {
     CsvDocumentEventAction,
     CsvDocumentEventModel,
     CsvDocumentModel,
     CsvDocumentRecordModel,
     CsvDocumentStatus,
-    CsvDocumentStatusFilter, CsvPredictionModel,
-    mapDocumentFilterStatus,
-    PerformanceSummaryModel
+    CsvDocumentStatusFilter,
+    CsvPredictionModel,
+    CsvPredictionResultModel,
+    mapDocumentFilterStatus
 } from "../../models";
-import {CsvDocumentApi, CsvDocumentProcessorApi} from "../../services";
+import {CsvDocumentApi, CsvDocumentProcessorApi, CsvPredictionRecordOptionsModel} from "../../services";
 import {PubSub} from "graphql-subscriptions";
 
 const pubSub = new PubSub();
@@ -59,6 +67,14 @@ export class CsvDocumentResolver {
         return this.service.listCsvDocumentRecords(id)
     }
 
+    @Query(returns =>  [CsvPredictionResult])
+    async listCsvPredictionRecords(
+        @Args('id', { type: () => ID }) id: string,
+        @Args('options', {type: () => CsvPredictionRecordOptions, nullable: true}) options?: CsvPredictionRecordOptionsModel
+    ): Promise<CsvPredictionResultModel[]> {
+        return this.service.listPredictionRecords(id, options)
+    }
+
     @Query(returns =>  [CsvPrediction])
     async listCsvPredictions(
         @Args('id', { type: () => ID }) id: string
@@ -79,6 +95,13 @@ export class CsvDocumentResolver {
         @Args('model', {type: () => String, nullable: true}) model?: string,
     ): Promise<CsvPredictionModel> {
         return this.processor.createCsvPrediction(id, model)
+    }
+
+    @Query(returns =>  [CsvPrediction])
+    async getCsvPrediction(
+        @Args('id', {type: () => ID }) id: string
+    ): Promise<CsvPredictionModel> {
+        return this.service.getCsvPrediction(id);
     }
 
     @Subscription(() => CsvDocument)

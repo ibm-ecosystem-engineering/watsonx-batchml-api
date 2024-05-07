@@ -1,16 +1,20 @@
-import {Field, ID, ObjectType, registerEnumType} from "@nestjs/graphql";
+import {Field, ID, InputType, ObjectType, registerEnumType} from "@nestjs/graphql";
 
 import {
     CsvDocumentModel,
     CsvDocumentRecordModel,
     CsvDocumentStatus,
-    CsvDocumentStatusFilter, CsvPredictionModel,
+    CsvDocumentStatusFilter,
+    CsvPredictionModel,
+    CsvPredictionRecordFilter,
     CsvPredictionResultModel,
     PerformanceSummaryModel
 } from "../models";
+import {CsvPredictionRecordOptionsModel} from "../services";
 
 registerEnumType(CsvDocumentStatus, {name: 'CsvDocumentStatus', description: 'Csv document statuses'})
 registerEnumType(CsvDocumentStatusFilter, {name: 'CsvDocumentStatusFilter', description: 'Csv document statuses'})
+registerEnumType(CsvPredictionRecordFilter, {name: 'CsvPredictionRecordFilter', description: 'Filter for csv prediction records'})
 
 @ObjectType({description: 'CSV Document'})
 export class CsvDocument implements CsvDocumentModel {
@@ -113,6 +117,14 @@ export class CsvPredictionResult implements CsvPredictionResultModel {
     providedValue: string;
     @Field()
     predictionValue: string;
+    @Field(() => Boolean, {nullable: true})
+    agree: boolean;
     @Field(() => Number)
     confidence: number;
+}
+
+@InputType({description: 'CSV Prediction Result'})
+export class CsvPredictionRecordOptions implements CsvPredictionRecordOptionsModel {
+    @Field(() => CsvPredictionRecordFilter)
+    filter?: CsvPredictionRecordFilter
 }

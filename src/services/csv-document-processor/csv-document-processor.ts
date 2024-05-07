@@ -30,7 +30,6 @@ export class CsvDocumentProcessor implements CsvDocumentProcessorApi {
 
         const prediction: BatchPredictionResult = await this.predictorService.predictValues(data, model)
 
-        return this.service
-            .addCsvDocumentPrediction(documentId, prediction)
+        return this.service.addCsvDocumentPrediction(documentId, prediction)
     }
 }

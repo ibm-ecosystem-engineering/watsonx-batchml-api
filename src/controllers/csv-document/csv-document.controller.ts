@@ -5,12 +5,13 @@ import {
     HttpException,
     HttpStatus,
     Param,
-    Post,
+    Post, Res,
     UploadedFile,
     UseInterceptors
 } from "@nestjs/common";
-import {ApiOkResponse, ApiOperation, ApiParam, ApiTags} from "@nestjs/swagger";
+import {ApiOkResponse, ApiOperation, ApiParam, ApiResponse, ApiTags} from "@nestjs/swagger";
 import {FileInterceptor} from "@nestjs/platform-express";
+import { Response } from 'express';
 
 import {CsvDocumentInput} from "./csv-document.apitypes";
 import {CsvDocument} from "../../graphql-types";
@@ -63,19 +64,19 @@ export class CsvDocumentController {
         description: 'The name of the document'
     })
     @ApiOkResponse({
-        type: CsvDocument,
-        description: "Returns selected document"
+        schema: {
+            type: 'string',
+            format: 'binary'
+        }
     })
-    async getCsvDocument(@Param('id') id: string, @Param('name') name: string): Promise<CsvDocumentModel> {
+    async getCsvDocument(@Res() response: Response, @Param('id') id: string, @Param('name') name: string) {
         console.log('Getting csv document: ' + id);
 
-        return this.service.getCsvDocument(id)
-            .catch(err => {
-                throw isDocumentNotFound(err)
-                    ? new HttpException(err.message, HttpStatus.NOT_FOUND)
-                    : new HttpException(`Error retrieving case: ${id}`, HttpStatus.INTERNAL_SERVER_ERROR)
-            })
+        const {filename, buffer} = await this.service.getOriginalCsvDocument(id);
 
+        response.contentType('text/csv');
+        response.attachment(filename)
+        response.send(buffer)
     }
 
 
@@ -101,15 +102,19 @@ export class CsvDocumentController {
         type: CsvDocument,
         description: "Returns selected document"
     })
-    async getCsvPredictionDocument(@Param('id') id: string, @Param('predictionId') predictionId: string, @Param('name') name: string): Promise<CsvDocumentModel> {
+    async getCsvPredictionDocument(@Res() response: Response, @Param('id') id: string, @Param('predictionId') predictionId: string, @Param('name') name: string) {
         console.log('Getting csv prediction document: ' + id + ', ' + predictionId);
 
-        return this.service.getCsvDocument(id)
-            .catch(err => {
-                throw isDocumentNotFound(err)
-                    ? new HttpException(err.message, HttpStatus.NOT_FOUND)
-                    : new HttpException(`Error retrieving case: ${id}`, HttpStatus.INTERNAL_SERVER_ERROR)
-            })
+        try {
+            const {filename, buffer} = await this.service.getPredictionDocument(id, predictionId, name);
 
+            response.contentType('text/csv');
+            response.attachment(filename);
+            response.send(buffer);
+        } catch (err) {
+            throw isDocumentNotFound(err)
+                ? new HttpException(err.message, HttpStatus.NOT_FOUND)
+                : new HttpException(`Error retrieving case: ${id}`, HttpStatus.INTERNAL_SERVER_ERROR)
+        }
     }
 }
