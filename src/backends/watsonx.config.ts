@@ -6,6 +6,7 @@ export interface WatsonxConfig {
     version: string;
     defaultDeploymentId: string;
     defaultDeploymentFields: string[];
+    defaultLabel: string;
 }
 
 let _config: WatsonxConfig;
@@ -21,6 +22,7 @@ export const watsonxConfig = (): WatsonxConfig | undefined => {
         version: process.env.WML_VERSION,
         defaultDeploymentId: process.env.WML_DEFAULT_DEPLOYMENT_ID,
         defaultDeploymentFields: JSON.parse(process.env.WML_DEFAULT_DEPLOYMENT_FIELDS || '[]'),
+        defaultLabel: process.env.WML_DEFAULT_LABEL || 'WHT_PER',
     }
 
     if (!config.apiKey || !config.endpoint || !config.defaultDeploymentId || !config.identityUrl) {

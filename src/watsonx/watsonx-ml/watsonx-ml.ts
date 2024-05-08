@@ -2,10 +2,12 @@ import Axios, {AxiosInstance} from 'axios';
 import {IamTokenManager} from "ibm-cloud-sdk-core";
 
 import {WatsonxConfig} from "../../backends";
-import {delay, first, pThrottle} from "../../util";
+import {AIModelModel} from "../../models";
+import {AiModelApi} from "../../services";
+import {first, pThrottle} from "../../util";
 
 const throttle = pThrottle({
-    limit: 2,
+    limit: 1,
     interval: 1000,
 })
 
@@ -14,6 +16,7 @@ export interface PredictionInput<T = any> {
 }
 
 export interface PredictionValue {
+    providedValue?: string;
     prediction: string;
     confidence: number;
 }
@@ -24,9 +27,24 @@ export interface PredictionResponse<T = any> {
     results: PredictionValue[];
 }
 
+type DeploymentFieldType = string | DeploymentField
+
+type DeploymentFieldFormatter = (data: unknown, fields: DeploymentFieldType[], currentField: DeploymentFieldType) => string
+
+interface DeploymentField {
+    name: string;
+    aliases?: string[]
+    formatter?: DeploymentFieldFormatter
+}
+
 interface DeploymentConfig {
     deploymentId: string;
-    deploymentFields: string[];
+    deploymentFields: DeploymentFieldType[];
+    label: string;
+}
+
+const isDeploymentField = (value: unknown): value is DeploymentField => {
+    return !!value && !!((value as DeploymentField).name)
 }
 
 interface PredictionPayload {
@@ -44,7 +62,7 @@ interface PredictionPayloadData {
 
 export class WatsonxMl {
 
-    constructor(private readonly config: WatsonxConfig) {}
+    constructor(private readonly service: AiModelApi, private readonly config: WatsonxConfig) {}
 
     private async getClient(): Promise<AxiosInstance> {
         // TODO can any of this be cached?
@@ -65,7 +83,7 @@ export class WatsonxMl {
     }
 
     async predict<T>(input: PredictionInput<T>, deployment?: string): Promise<PredictionResponse<T>> {
-        const {deploymentId, deploymentFields} = await this.getDeployment(deployment)
+        const {deploymentId, deploymentFields, label} = await this.getDeployment(deployment)
 
         const client = await this.getClient()
 
@@ -74,10 +92,8 @@ export class WatsonxMl {
             .then(result => {
                 return result.data.predictions
             })
-            .then(predictionResultToPredictionValues)
+            .then(predictionResultToPredictionValues(input, label))
             .then((data: PredictionValue[]) => {
-                console.log('Got predictions: ', data)
-
                 return {
                     model: deploymentId,
                     date: new Date(),
@@ -91,25 +107,54 @@ export class WatsonxMl {
     }
 
     private async getDeployment(deployment?: string): Promise<DeploymentConfig> {
-        return {
+        const defaultConfig = {
             deploymentId: this.config.defaultDeploymentId,
             deploymentFields: this.config.defaultDeploymentFields,
+            label: this.config.defaultLabel,
         }
+
+        if (deployment) {
+            try {
+                return await this.service.getAIModel(deployment)
+                    .then((result: AIModelModel) => ({
+                        deploymentId: result.deploymentId,
+                        deploymentFields: result.inputs,
+                        label: result.label
+                    }))
+            } catch (err) {
+                console.error('Error getting model: ' + deployment, err)
+            }
+        }
+
+        return defaultConfig;
     }
 
-    private buildPayload<T>(input: PredictionInput<T>, fields: string[]): PredictionPayload {
+    private buildPayload<T>(input: PredictionInput<T>, fields: Array<string | DeploymentField>): PredictionPayload {
         return {
             input_data: [{
-                fields,
+                fields: fields.map(val => isDeploymentField(val) ? val.name : val),
                 values: input.data.map(flatten(fields))
             }]
         }
     }
 }
 
-const flatten = <T>(fields: string[]) => {
+const flatten = <T>(fields: Array<string | DeploymentField>) => {
     return (val: T): string[] => {
-        return fields.map(key => val[key])
+        return fields.map(getDeploymentFieldValue(val))
+    }
+}
+
+const getDeploymentFieldValue = <T> (val: T) => {
+    return (field: DeploymentFieldType, idx: number, fields: DeploymentFieldType[]): string => {
+        const formatter: DeploymentFieldFormatter | undefined = isDeploymentField(field) ? field.formatter : undefined
+        if (formatter) {
+            return formatter(val, fields, field)
+        }
+
+        const keys: string[] = isDeploymentField(field) ? [field.name].concat(field.aliases || []) : [field]
+
+        return first(keys.map(k => val[k]).filter(v => !!v)) || '(blank)'
     }
 }
 
@@ -117,15 +162,18 @@ const calculateConfidence = (probability: number[]): number => {
     return first(probability.sort((a, b) => b - a))
 }
 
-const predictionResultToPredictionValues = (payload: PredictionPayloadData[]): PredictionValue[] => {
+const predictionResultToPredictionValues = <T> (input: PredictionInput<T>, label: string) => {
 
-    return payload.reduce((result: PredictionValue[], current: PredictionPayloadData) => {
+    return (payload: PredictionPayloadData[]): PredictionValue[] => {
+        return payload.reduce((result: PredictionValue[], current: PredictionPayloadData, currentIndex: number) => {
 
-        const values: PredictionValue[] = current.values.map((val: string[]) => ({
-            prediction: val[0],
-            confidence: calculateConfidence(val[1] as unknown as number[])
-        }))
+            const values: PredictionValue[] = current.values.map((val: string[]) => ({
+                providedValue: input.data[currentIndex][label],
+                prediction: val[0],
+                confidence: calculateConfidence(val[1] as unknown as number[])
+            }))
 
-        return result.concat(values)
-    }, [])
+            return result.concat(values)
+        }, [])
+    }
 }

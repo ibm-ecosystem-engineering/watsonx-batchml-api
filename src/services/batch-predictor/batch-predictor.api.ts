@@ -8,7 +8,7 @@ export interface BatchPredictionResult {
 
 export interface BatchPredictionValue {
     csvRecordId: string;
-    providedValue: string;
+    providedValue?: string;
     prediction: string;
     confidence: number;
 }

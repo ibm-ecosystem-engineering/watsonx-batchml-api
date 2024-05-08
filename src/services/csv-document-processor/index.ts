@@ -3,6 +3,7 @@ import {CsvDocumentProcessorApi} from "./csv-document-processor.api";
 import {CsvDocumentProcessor} from "./csv-document-processor";
 import {csvDocumentApi} from "../csv-document";
 import {batchPredictorApi} from "../batch-predictor";
+import {aiModelApi} from "../ai-model";
 
 export * from './csv-document-processor.api'
 
@@ -14,7 +15,8 @@ export const csvDocumentProcessor = () => {
 
     return _instance = new CsvDocumentProcessor(
         csvDocumentApi(),
-        batchPredictorApi()
+        batchPredictorApi(),
+        aiModelApi(),
     )
 }
 
