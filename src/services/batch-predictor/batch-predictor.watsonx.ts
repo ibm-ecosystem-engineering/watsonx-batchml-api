@@ -1,14 +1,15 @@
 import {BatchPredictionResult, BatchPredictorApi} from "./batch-predictor.api";
 import {WatsonxConfig} from "../../backends";
 import {CsvDocumentRecordModel} from "../../models";
-import {WatsonxMl} from "../../watsonx";
+import {PredictionValue, WatsonxMl} from "../../watsonx";
+import {aiModelApi} from "../ai-model";
 
 
 export class BatchPredictorWatsonx implements BatchPredictorApi {
     private readonly service: WatsonxMl;
 
     constructor(config: WatsonxConfig) {
-        this.service = new WatsonxMl(config)
+        this.service = new WatsonxMl(aiModelApi(), config)
     }
 
     async predictValues(data: CsvDocumentRecordModel[], model?: string): Promise<BatchPredictionResult> {
@@ -16,16 +17,24 @@ export class BatchPredictorWatsonx implements BatchPredictorApi {
             .predict({data}, model)
             .then(result => {
                 const results = result.results
-                    .map(((val, index) => Object.assign(
+                    .map(((val: PredictionValue, index) => Object.assign(
                         {},
                         val,
                         {
-                            providedValue: data[index].providedValue,
                             csvRecordId: data[index].id,
                         }
                     )))
 
                 return Object.assign({}, result, {results})
+            })
+            .catch(err => {
+                console.log('Error calculating predictions: ', err)
+
+                return {
+                    date: new Date(),
+                    model,
+                    results: []
+                }
             })
     }
 

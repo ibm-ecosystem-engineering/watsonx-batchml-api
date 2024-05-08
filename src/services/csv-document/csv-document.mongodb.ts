@@ -68,10 +68,8 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
 
         // insert records
         console.log('Parsing rows from CSV doc')
-        const rows: CsvDocumentRecordModel[] = await parseDocumentRows(
-            document.id,
-            document.predictField,
-            file)
+        const rows: CsvDocumentRecordModel[] = await parseDocumentRows(document.id, file)
+
         console.log('Inserting csv rows: ' + rows.length)
         await this.documentRecords.insertMany(rows)
 
@@ -129,9 +127,12 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
     async addCsvDocumentPrediction(documentId: string, prediction: CsvDocumentPredictionResult): Promise<CsvPredictionModel> {
         const csvPrediction = await this.insertCsvPrediction(prediction, documentId);
 
-        await this.predictionRecords.insertMany(
-            predictionResultsToMongodbPredictionResults(prediction.results, documentId, csvPrediction.id)
-        )
+        const result = predictionResultsToMongodbPredictionResults(prediction.results, documentId, csvPrediction.id)
+        if (result.length > 0) {
+            await this.predictionRecords.insertMany(result)
+        } else {
+            console.log('No prediction results')
+        }
 
         documentEvents.update({id: documentId})
 

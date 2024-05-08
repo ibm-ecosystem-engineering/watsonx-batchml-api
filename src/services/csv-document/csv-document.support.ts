@@ -4,14 +4,13 @@ import {PassThrough, Stream} from 'stream';
 import {CsvDocumentEventAction, CsvDocumentRecordModel, PerformanceSummaryModel} from "../../models";
 import {Observable, Subject} from "rxjs";
 
-export const parseDocumentRows = async (documentId: string, predictField: string, file: {filename: string, buffer: Buffer}): Promise<CsvDocumentRecordModel[]> => {
+export const parseDocumentRows = async (documentId: string, file: {filename: string, buffer: Buffer}): Promise<CsvDocumentRecordModel[]> => {
 
     // parse csv file
     const documentRows: CsvDocumentRecordModel[] = await parseCsv(file.buffer)
 
     return documentRows.map(row => {
         row.documentId = documentId;
-        row.providedValue = row[predictField];
         row.data = JSON.stringify(row);
 
         return row;

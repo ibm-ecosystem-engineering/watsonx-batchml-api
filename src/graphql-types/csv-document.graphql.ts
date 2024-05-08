@@ -32,9 +32,6 @@ export class CsvDocument implements CsvDocumentModel {
 
     @Field({nullable: true})
     description: string;
-
-    @Field()
-    predictField: string;
 }
 
 @ObjectType({description: 'Csv Document Record'})
@@ -45,8 +42,8 @@ export class CsvDocumentRecord implements CsvDocumentRecordModel {
     @Field()
     documentId: string;
 
-    @Field()
-    providedValue: string;
+    @Field({nullable: true})
+    providedValue?: string;
 
     @Field({nullable: true})
     predictionValue?: string;

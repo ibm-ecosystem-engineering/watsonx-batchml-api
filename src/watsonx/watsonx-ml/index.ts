@@ -1,5 +1,6 @@
 import {WatsonxMl} from "./watsonx-ml";
 import {watsonxConfig} from "../../backends";
+import {aiModelApi} from "../../services";
 
 export * from './watsonx-ml'
 
@@ -15,5 +16,5 @@ export const buildMl = (): WatsonxMl => {
         throw new Error('watsonx config not provided!!!!')
     }
 
-    return _instance = new WatsonxMl(config)
+    return _instance = new WatsonxMl(aiModelApi(), config)
 }

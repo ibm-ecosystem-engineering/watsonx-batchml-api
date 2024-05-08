@@ -3,7 +3,6 @@ import {MachineLearningResultModel} from "./machine-learning-result.model";
 export interface CsvDocumentInputModel {
     name: string;
     description?: string;
-    predictField: string;
 }
 
 export interface CsvDocumentModel extends CsvDocumentInputModel {
@@ -22,7 +21,6 @@ export const isCsvDocumentModel = (val: unknown): val is CsvDocumentModel => {
 export interface CsvDocumentRecordModel {
     id: string;
     documentId: string;
-    providedValue: string;
     data: string;
 }
 
