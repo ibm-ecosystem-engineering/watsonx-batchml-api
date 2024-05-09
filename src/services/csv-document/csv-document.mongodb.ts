@@ -221,6 +221,8 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
             query['agree'] = false
         }
 
+        console.log('Querying prediction records: ', {filter, query})
+
         return this.predictionRecords
             .find(query)
             .map((predictionResult: WithId<CsvPredictionResultModel>) => Object.assign({}, predictionResult, {id: predictionResult._id.toString()}))
@@ -255,7 +257,7 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
                 return undefined
             }
 
-            return Object.assign({}, JSON.parse(docRecord.data), {predictionValue: val.predictionValue, confidence: val.confidence})
+            return Object.assign({}, JSON.parse(docRecord.data), {predictionValue: val.predictionValue, confidence: val.confidence, agree: val.agree})
         })
 
         const name = parsePath(document.name).name
@@ -358,16 +360,48 @@ const predictionToMongodbPrediction = (prediction: CsvDocumentPredictionResult, 
     return result
 }
 
-const predictionResultsToMongodbPredictionResults = (results: BatchPredictionValue[], documentId: string, predictionId: string): MongodbCsvPredictionResultModel[] => {
-    return results.map(predictionResultToMongodbPredictionResult(documentId, predictionId))
+const predictionResultsToMongodbPredictionResults = (results: BatchPredictionValue[], documentId: string, predictionId: string, compareFn?: CompareFn): MongodbCsvPredictionResultModel[] => {
+    return results.map(predictionResultToMongodbPredictionResult(documentId, predictionId, compareFn))
 }
 
-const predictionResultToMongodbPredictionResult = (documentId: string, predictionId: string) => {
+type CompareFn = (prediction: unknown, provided: unknown) => boolean
+
+const convertValue = (value: unknown): unknown => {
+    const num = Number(value)
+
+    if (isNaN(num)) {
+        return value
+    }
+
+    return num.valueOf()
+}
+
+const defaultCompareFn: CompareFn = (prediction: unknown, provided: unknown): boolean => {
+    const result = convertValue(prediction) == convertValue(provided)
+
+    if (!result) {
+        const buildReport = (value: unknown) => {
+            const convertedValue = convertValue(value)
+            return {
+                type: typeof value,
+                convertedType: typeof convertedValue,
+                value,
+                convertedValue
+            }
+        }
+    }
+
+    return result
+}
+
+const predictionResultToMongodbPredictionResult = (documentId: string, predictionId: string, compareFn: CompareFn = defaultCompareFn) => {
+
+    console.log('Preparing predictions for mongodb')
     return (result: BatchPredictionValue): MongodbCsvPredictionResultModel => ({
         predictionValue: result.prediction,
         confidence: result.confidence,
         providedValue: result.providedValue,
-        agree: result.prediction === result.providedValue,
+        agree: compareFn(result.prediction, result.providedValue),
         csvRecordId: result.csvRecordId,
         documentId,
         predictionId,
