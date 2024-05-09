@@ -165,9 +165,9 @@ const calculateConfidence = (probability: number[]): number => {
 const predictionResultToPredictionValues = <T> (input: PredictionInput<T>, label: string) => {
 
     return (payload: PredictionPayloadData[]): PredictionValue[] => {
-        return payload.reduce((result: PredictionValue[], current: PredictionPayloadData, currentIndex: number) => {
+        return payload.reduce((result: PredictionValue[], current: PredictionPayloadData) => {
 
-            const values: PredictionValue[] = current.values.map((val: string[]) => ({
+            const values: PredictionValue[] = current.values.map((val: string[], currentIndex: number) => ({
                 providedValue: input.data[currentIndex][label],
                 prediction: val[0],
                 confidence: calculateConfidence(val[1] as unknown as number[])
