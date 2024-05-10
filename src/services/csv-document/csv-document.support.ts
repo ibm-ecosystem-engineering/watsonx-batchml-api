@@ -1,8 +1,13 @@
 import {parse, Parser} from 'csv-parse';
 import {PassThrough, Stream} from 'stream';
-
-import {CsvDocumentEventAction, CsvDocumentRecordModel, PerformanceSummaryModel} from "../../models";
 import {Observable, Subject} from "rxjs";
+
+import {
+    CsvDocumentEventAction,
+    CsvDocumentRecordModel, CsvPredictionCorrectionModel,
+    CsvPredictionResultModel,
+    PerformanceSummaryModel
+} from "../../models";
 
 export const parseDocumentRows = async (documentId: string, file: {filename: string, buffer: Buffer}): Promise<CsvDocumentRecordModel[]> => {
 
@@ -14,6 +19,16 @@ export const parseDocumentRows = async (documentId: string, file: {filename: str
         row.data = JSON.stringify(row);
 
         return row;
+    });
+}
+
+export const parsePredictionRows = async (metadata: {documentId: string, predictionId: string}, file: {filename: string, buffer: Buffer}): Promise<CsvPredictionCorrectionModel[]> => {
+
+    // parse csv file
+    const documentRows: CsvPredictionResultModel[] = await parseCsv(file.buffer)
+
+    return documentRows.map(row => {
+        return Object.assign(row, metadata, {predictionRecordId: row.id, id: undefined});
     });
 }
 
@@ -64,14 +79,6 @@ const parseCsvStream = async <T = any>(parser: Parser, stream: Stream): Promise<
     })
 }
 
-export const buildOriginalUrl = (documentId: string, name: string): string => {
-    return `/csv-document/${documentId}/${name}`
-}
-
-export const buildPredictionUrl = (documentId: string, predictionId: string): string => {
-    return `/csv-document/${documentId}/prediction/${predictionId}/result.csv`
-}
-
 export class PerformanceSummary implements PerformanceSummaryModel {
     totalCount: number = 0;
     agreeAboveThreshold: number = 0;
@@ -79,14 +86,16 @@ export class PerformanceSummary implements PerformanceSummaryModel {
     disagreeAboveThreshold: number = 0;
     disagreeBelowThreshold: number = 0;
     confidenceThreshold: number;
+    correctedRecords: number;
 
-    constructor({confidenceThreshold, totalCount, agreeAboveThreshold, agreeBelowThreshold, disagreeBelowThreshold, disagreeAboveThreshold}: Partial<PerformanceSummaryModel> = {}) {
+    constructor({confidenceThreshold, totalCount, agreeAboveThreshold, agreeBelowThreshold, disagreeBelowThreshold, disagreeAboveThreshold, correctedRecords}: Partial<PerformanceSummaryModel> = {}) {
         this.totalCount = totalCount || 0;
         this.agreeBelowThreshold = agreeAboveThreshold || 0;
         this.agreeBelowThreshold = agreeBelowThreshold || 0;
         this.disagreeAboveThreshold = disagreeAboveThreshold || 0;
         this.disagreeBelowThreshold = disagreeBelowThreshold || 0;
         this.confidenceThreshold = confidenceThreshold || 0.8;
+        this.correctedRecords = correctedRecords || 0;
     }
 
     addPrediction({providedValue, predictionValue, confidence}: {providedValue: string, predictionValue?: string, confidence?: number}): PerformanceSummary {
@@ -120,6 +129,7 @@ export class PerformanceSummary implements PerformanceSummaryModel {
             disagreeBelowThreshold: this.disagreeBelowThreshold,
             disagreeAboveThreshold: this.disagreeAboveThreshold,
             confidenceThreshold: this.confidenceThreshold,
+            correctedRecords: this.correctedRecords,
         }
     }
 }

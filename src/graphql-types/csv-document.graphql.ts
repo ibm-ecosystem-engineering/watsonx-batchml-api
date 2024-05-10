@@ -4,7 +4,7 @@ import {
     CsvDocumentModel,
     CsvDocumentRecordModel,
     CsvDocumentStatus,
-    CsvDocumentStatusFilter,
+    CsvDocumentStatusFilter, CsvPredictionCorrectionModel,
     CsvPredictionModel,
     CsvPredictionRecordFilter,
     CsvPredictionResultModel,
@@ -74,12 +74,35 @@ export class PerformanceSummary implements PerformanceSummaryModel {
 
     @Field(() => Number)
     disagreeBelowThreshold: number;
+
+    @Field(() => Number)
+    correctedRecords: number;
 }
 
 @ObjectType({description: 'Record'})
 export class Record {
     @Field(() => ID)
     id: string;
+}
+
+@ObjectType({description: 'Csv prediction correction'})
+export class CsvPredictionCorrection implements CsvPredictionCorrectionModel {
+    @Field(() => ID)
+    id: string;
+    @Field(() => Boolean)
+    agree: boolean;
+    @Field()
+    documentId: string;
+    @Field()
+    predictionId: string;
+    @Field(() => [Number])
+    confidence: number;
+    @Field()
+    predictionRecordId: string;
+    @Field()
+    predictionValue: string;
+    @Field()
+    providedValue: string;
 }
 
 @ObjectType({description: 'CSV Prediction'})
@@ -98,6 +121,8 @@ export class CsvPrediction implements CsvPredictionModel {
     predictions: CsvPredictionResultModel[];
     @Field(() => PerformanceSummary)
     performanceSummary: PerformanceSummaryModel;
+    @Field(() => [CsvPredictionCorrection], {nullable: true})
+    corrections?: CsvPredictionCorrectionModel[];
 }
 
 @ObjectType({description: 'CSV Prediction Result'})
