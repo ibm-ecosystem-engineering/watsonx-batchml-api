@@ -40,6 +40,7 @@ enum CsvDocumentStatusFilter {
 
 """CSV Prediction"""
 type CsvPrediction {
+  corrections: [CsvPredictionCorrection!]
   date: String!
   documentId: String!
   id: ID!
@@ -47,6 +48,18 @@ type CsvPrediction {
   performanceSummary: PerformanceSummary!
   predictionUrl: String!
   predictions: [CsvPredictionResult!]!
+}
+
+"""Csv prediction correction"""
+type CsvPredictionCorrection {
+  agree: Boolean!
+  confidence: [Float!]!
+  documentId: String!
+  id: ID!
+  predictionId: String!
+  predictionRecordId: String!
+  predictionValue: String!
+  providedValue: String!
 }
 
 """Filter for csv prediction records"""
@@ -89,6 +102,7 @@ type PerformanceSummary {
   agreeAboveThreshold: Float!
   agreeBelowThreshold: Float!
   confidenceThreshold: Float!
+  correctedRecords: Float!
   disagreeAboveThreshold: Float!
   disagreeBelowThreshold: Float!
   totalCount: Float!

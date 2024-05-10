@@ -31,21 +31,21 @@ const _models: AIModelModel[] = [{
         }
     ],
     label: "WHT_PER"
-}, {
-    id: '2',
-    name: 'tax_withholding_v2',
-    deploymentId: 'tax_withholding_v2',
-    inputs: [
-        "MCO_NO",
-        "MCO_CMP_NO",
-        "CTRY_NO",
-        "SERVICE_PERFORMED_IN",
-        {name: "NEC_DESCRIPTION_Cleaned", aliases: ["NEC_DESCRIPTION"]},
-        "NEC_CODE",
-        "MARKETING_LEGAL_ENTITY_NAME",
-        "PERFORMING_LEGAL_ENTITY_NAME"
-    ],
-    label: "WHT_PER"
+// }, {
+//     id: '2',
+//     name: 'tax_withholding_v2',
+//     deploymentId: 'tax_withholding_v2',
+//     inputs: [
+//         "MCO_NO",
+//         "MCO_CMP_NO",
+//         "CTRY_NO",
+//         "SERVICE_PERFORMED_IN",
+//         {name: "NEC_DESCRIPTION_Cleaned", aliases: ["NEC_DESCRIPTION"]},
+//         "NEC_CODE",
+//         "MARKETING_LEGAL_ENTITY_NAME",
+//         "PERFORMING_LEGAL_ENTITY_NAME"
+//     ],
+//     label: "WHT_PER"
 }]
 
 let _id: number = _models.length

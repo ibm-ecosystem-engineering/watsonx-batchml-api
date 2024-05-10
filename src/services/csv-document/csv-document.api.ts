@@ -3,8 +3,13 @@ import {
     CsvDocumentEventAction,
     CsvDocumentEventModel,
     CsvDocumentInputModel,
-    CsvDocumentModel, CsvDocumentRecordModel,
-    CsvDocumentStatus, CsvPredictionModel, CsvPredictionRecordFilter, CsvPredictionResultModel,
+    CsvDocumentModel,
+    CsvDocumentRecordModel,
+    CsvDocumentStatus,
+    CsvPredictionModel,
+    CsvPredictionRecordFilter,
+    CsvPredictionResultModel,
+    CsvUpdatedDocumentInputModel,
     PerformanceSummaryModel
 } from "../../models";
 import {BatchPredictionValue} from "../batch-predictor";
@@ -33,6 +38,8 @@ export interface CsvPredictionRecordOptionsModel {
 
 export abstract class CsvDocumentApi {
     abstract addCsvDocument(input: CsvDocumentInputModel, file: {filename: string, buffer: Buffer}): Promise<CsvDocumentModel>
+    abstract addCorrectedCsvDocument(input: CsvUpdatedDocumentInputModel, file: {filename: string, buffer: Buffer}): Promise<CsvDocumentModel>
+
     abstract listCsvDocuments(status?: CsvDocumentStatus): Promise<CsvDocumentModel[]>
     abstract getCsvDocument(id: string): Promise<CsvDocumentModel>
     abstract deleteCsvDocument(id: string): Promise<{id: string}>

@@ -5,6 +5,13 @@ export interface CsvDocumentInputModel {
     description?: string;
 }
 
+export interface CsvUpdatedDocumentInputModel {
+    name: string;
+    documentId: string;
+    predictionId: string;
+    description?: string;
+}
+
 export interface CsvDocumentModel extends CsvDocumentInputModel {
     id: string;
     status: CsvDocumentStatus;
@@ -68,6 +75,7 @@ export interface CsvPredictionModel {
     date: string;
     predictionUrl: string;
     predictions: CsvPredictionResultModel[];
+    corrections?: CsvPredictionCorrectionModel[];
     performanceSummary: PerformanceSummaryModel;
 }
 
@@ -82,6 +90,17 @@ export interface CsvPredictionResultModel {
     confidence: number;
 }
 
+export interface CsvPredictionCorrectionModel {
+    id: string;
+    documentId: string;
+    predictionId: string;
+    predictionRecordId: string;
+    providedValue: string;
+    predictionValue: string;
+    agree: boolean;
+    confidence: number;
+}
+
 // performance summary (e.g. number of agree/disagree, above/below confidence threshold
 export interface PerformanceSummaryModel {
     totalCount: number;
@@ -90,6 +109,7 @@ export interface PerformanceSummaryModel {
     agreeBelowThreshold: number;
     disagreeAboveThreshold: number;
     disagreeBelowThreshold: number;
+    correctedRecords: number;
 }
 
 export interface CsvDocumentRowModel {

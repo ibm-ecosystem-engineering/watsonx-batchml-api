@@ -13,17 +13,23 @@ import {ApiOkResponse, ApiOperation, ApiParam, ApiResponse, ApiTags} from "@nest
 import {FileInterceptor} from "@nestjs/platform-express";
 import { Response } from 'express';
 
-import {CsvDocumentInput} from "./csv-document.apitypes";
+import {CsvDocumentInput, CsvUpdatedDocumentInput} from "./csv-document.apitypes";
 import {CsvDocument} from "../../graphql-types";
 import {CsvDocumentModel} from "../../models";
-import {CsvDocumentApi, isDocumentNotFound} from "../../services";
+import {
+    basePathCsvDocument,
+    CsvDocumentApi,
+    isDocumentNotFound,
+    pathGetCsvDocument,
+    pathGetCsvPredictionDocument, pathPostCorrectedPredictionDocument, pathPostOriginalDocument
+} from "../../services";
 
-@Controller('csv-document')
+@Controller(basePathCsvDocument)
 @ApiTags('csv-document')
 export class CsvDocumentController {
     constructor(private readonly service: CsvDocumentApi) {}
 
-    @Post()
+    @Post(pathPostOriginalDocument)
     @ApiOperation({
         operationId: 'submit-csv-document',
         summary: 'Add csv document',
@@ -49,7 +55,33 @@ export class CsvDocumentController {
             })
     }
 
-    @Get(':id/:name')
+    @Post(pathPostCorrectedPredictionDocument)
+    @ApiOperation({
+        operationId: 'submit-corrected-prediction-document',
+        summary: 'Add corrected prediction document',
+        description: 'Provide feedback document with updated predictions'
+    })
+    @UseInterceptors(FileInterceptor('file'))
+    @ApiOkResponse({
+        type: CsvDocument,
+        description: "Returns new document"
+    })
+    async submitCorrectedPredictionsDocument(@Body() input: CsvUpdatedDocumentInput, @UploadedFile() file?: Express.Multer.File): Promise<CsvDocumentModel> {
+
+        console.log('Received updated CSV document')
+
+        return this.service.addCorrectedCsvDocument(input, file)
+            .then((result) => {
+                console.log('Document upload complete')
+                return result
+            })
+            .catch(err => {
+                console.error('Error adding CSV document: ', err)
+                throw new HttpException('Error adding CSV document', HttpStatus.INTERNAL_SERVER_ERROR)
+            })
+    }
+
+    @Get(pathGetCsvDocument)
     @ApiOperation({
         operationId: 'get-csv-document',
         summary: 'Get csv document',
@@ -80,7 +112,7 @@ export class CsvDocumentController {
     }
 
 
-    @Get(':id/prediction/:predictionId/:name')
+    @Get(pathGetCsvPredictionDocument)
     @ApiOperation({
         operationId: 'get-csv-prediction-document',
         summary: 'Get csv prediction document',

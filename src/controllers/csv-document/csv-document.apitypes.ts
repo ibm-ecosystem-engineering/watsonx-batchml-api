@@ -1,14 +1,29 @@
 import {ApiProperty, ApiPropertyOptional} from "@nestjs/swagger";
 
-import {CsvDocumentInputModel, CsvDocumentModel, CsvDocumentStatus, PerformanceSummaryModel} from "../../models";
+import {
+    CsvDocumentInputModel,
+    CsvDocumentModel,
+    CsvDocumentStatus,
+    CsvUpdatedDocumentInputModel,
+    PerformanceSummaryModel
+} from "../../models";
 
 export class CsvDocumentInput implements CsvDocumentInputModel {
     @ApiProperty()
     name: string;
     @ApiProperty({nullable: true})
     description?: string;
+}
+
+export class CsvUpdatedDocumentInput implements CsvUpdatedDocumentInputModel {
     @ApiProperty()
-    predictField: string;
+    name: string;
+    @ApiProperty()
+    documentId: string;
+    @ApiProperty()
+    predictionId: string;
+    @ApiProperty({nullable: true})
+    description?: string;
 }
 
 export class CsvDocument implements CsvDocumentModel {
@@ -43,4 +58,6 @@ export class PerformanceSummary implements PerformanceSummaryModel {
     disagreeBelowThreshold: number;
     @ApiProperty()
     confidenceThreshold: number;
+    @ApiProperty()
+    correctedRecords: number;
 }

@@ -5,6 +5,7 @@ import {CsvDocumentMongodb} from "./csv-document.mongodb";
 import {mongodbClient, MongodbConfig, mongodbConfig} from "../../backends";
 
 export * from './csv-document.api'
+export * from './csv-document.config'
 
 const config: MongodbConfig | undefined = mongodbConfig()
 

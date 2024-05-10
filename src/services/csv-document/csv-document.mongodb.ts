@@ -5,10 +5,8 @@ import {Collection, Db, GridFSBucket, ObjectId, OptionalId, WithId} from "mongod
 import {CsvDocumentApi, CsvDocumentPredictionResult, CsvPredictionRecordOptionsModel} from "./csv-document.api";
 import {
     bufferToStream,
-    buildOriginalUrl,
-    buildPredictionUrl,
     EventManager,
-    parseDocumentRows,
+    parseDocumentRows, parsePredictionRows,
     PerformanceSummary,
 } from "./csv-document.support";
 import {
@@ -17,14 +15,16 @@ import {
     CsvDocumentInputModel,
     CsvDocumentModel,
     CsvDocumentRecordModel,
-    CsvDocumentStatus,
+    CsvDocumentStatus, CsvPredictionCorrectionModel,
     CsvPredictionModel,
     CsvPredictionRecordFilter,
-    CsvPredictionResultModel,
+    CsvPredictionResultModel, CsvUpdatedDocumentInputModel,
     PerformanceSummaryModel
 } from "../../models";
 import {first, streamToBuffer} from "../../util";
 import {BatchPredictionValue} from "../batch-predictor";
+import {buildOriginalUrl, buildPredictionUrl} from "./csv-document.config";
+import {CsvPrediction, CsvPredictionCorrection} from "../../graphql-types";
 
 interface InternalCsvDocumentModel extends CsvDocumentInputModel {
     id: string;
@@ -45,6 +45,7 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
     private readonly documentRecords: Collection<CsvDocumentRecordModel>;
     private readonly predictions: Collection<CsvPredictionModel>;
     private readonly predictionRecords: Collection<CsvPredictionResultModel>;
+    private readonly predictionCorrectionRecords: Collection<CsvPredictionCorrectionModel>;
     private readonly bucket: GridFSBucket;
 
     constructor(db: Db) {
@@ -53,6 +54,7 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
 
         this.predictions = db.collection<CsvPredictionModel>('csvPredictions')
         this.predictionRecords = db.collection<CsvPredictionResultModel>('csvPredictionResults')
+        this.predictionCorrectionRecords = db.collection<CsvPredictionCorrectionModel>('csvPredictionCorrectionResults')
 
         this.bucket = new GridFSBucket(db, {bucketName: 'csvDocuments'})
     }
@@ -63,7 +65,7 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
         const document: CsvDocumentModel = await this.insertCsvDocument(input);
 
         // upload file
-        console.log('Uploding CSV file to database')
+        console.log('Uploading CSV file to database')
         const filename = await this.uploadCsvFile(file, document);
 
         // insert records
@@ -76,6 +78,37 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
         return documentEvents.add(document)
     }
 
+    async addCorrectedCsvDocument(input: CsvUpdatedDocumentInputModel, file: { filename: string; buffer: Buffer; }): Promise<CsvDocumentModel> {
+        console.log('Uploading updated CSV file to database')
+        const filename = await this.uploadUpdatedCsvFile(file, input);
+
+        const rows: CsvPredictionCorrectionModel[] = await parsePredictionRows(input, file)
+
+        const originalPredictionRecords: CsvPredictionResultModel[] = await this.listPredictionRecords(input.predictionId)
+
+        const changedRows: CsvPredictionCorrectionModel[] = rows.filter((row: CsvPredictionCorrectionModel) => {
+            const originalRecord = first(originalPredictionRecords.filter(record => record.id === row.predictionRecordId))
+
+            if (!originalRecord) {
+                console.log('  Unable to find original prediction record: ' + row.predictionRecordId)
+                return false
+            }
+
+            return !defaultCompareFn(originalRecord.predictionValue, row.predictionValue)
+        })
+
+        if (changedRows.length === 0) {
+            console.log('  No changed rows found! Nothing to store')
+            return undefined
+        } else {
+            console.log('  Found changed rows: ' + changedRows.length)
+        }
+
+        await this.predictionCorrectionRecords.insertMany(changedRows)
+
+        return undefined
+    }
+
     private uploadCsvFile(file: { filename: string; buffer: Buffer }, document: CsvDocumentModel): Promise<string | undefined> {
         return new Promise<string | undefined>((resolve, reject) => {
             const filename = `${document.id}-original.csv`
@@ -85,6 +118,24 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
                     chunkSizeBytes: 1048576,
                     metadata: {
                         documentId: document.id,
+                        name: document.name,
+                    }
+                }))
+                .on('finish', () => resolve(filename))
+                .on('error', err => reject(err))
+        })
+    }
+
+    private uploadUpdatedCsvFile(file: { filename: string; buffer: Buffer }, document: CsvUpdatedDocumentInputModel): Promise<string | undefined> {
+        return new Promise<string | undefined>((resolve, reject) => {
+            const filename = `${document.documentId}-${document.predictionId}-update.csv`
+
+            bufferToStream(file.buffer)
+                .pipe(this.bucket.openUploadStream(filename, {
+                    chunkSizeBytes: 1048576,
+                    metadata: {
+                        documentId: document.documentId,
+                        predictionId: document.predictionId,
                         name: document.name,
                     }
                 }))
@@ -172,7 +223,13 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
             })
             .toArray()
 
-        return predictionRecordsToPerformanceSummary(rows)
+        const corrections = await this.predictionCorrectionRecords
+            .find({
+                predictionId
+            })
+            .toArray()
+
+        return predictionRecordsToPerformanceSummary(rows, corrections)
     }
 
     async listCsvDocuments(status?: CsvDocumentStatus): Promise<CsvDocumentModel[]> {
@@ -233,6 +290,7 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
 
         return this.findPredictions(documentId)
             .then(results => this.populatePredictionRecords(documentId, results))
+            .then(results => this.populateCorrectionRecords(results))
             .then(results => this.populatePerformanceSummary(results))
     }
 
@@ -257,7 +315,7 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
                 return undefined
             }
 
-            return Object.assign({}, JSON.parse(docRecord.data), {predictionValue: val.predictionValue, confidence: val.confidence, agree: val.agree})
+            return Object.assign({}, JSON.parse(docRecord.data), {predictionValue: val.predictionValue, confidence: val.confidence, id: val.id, predictionId: val.predictionId, agree: val.agree})
         })
 
         const name = parsePath(document.name).name
@@ -325,12 +383,27 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
         return predictions
     }
 
+    private async populateCorrectionRecords(predictions: CsvPredictionModel[]): Promise<CsvPredictionModel[]> {
+        const correctionRecords: CsvPredictionCorrectionModel[] = await this.predictionCorrectionRecords
+            .find({
+                predictionId: {$in: predictions.map(val => val.id)}
+            })
+            .toArray()
+            .then(results => results.map(val => Object.assign({}, val, {id: val._id})))
+
+        return predictions.map(prediction => {
+            const corrections = correctionRecords.filter(c => c.predictionId === prediction.id)
+
+            return Object.assign({}, prediction, {corrections})
+        })
+    }
+
     private async populatePerformanceSummary(predictions: CsvPredictionModel[]): Promise<CsvPredictionModel[]> {
         return predictions.map(p => Object.assign(
             {},
             p,
             {
-                performanceSummary: predictionRecordsToPerformanceSummary(p.predictions)
+                performanceSummary: predictionRecordsToPerformanceSummary(p.predictions, p.corrections)
             }
         ))
     }
@@ -409,10 +482,10 @@ const predictionResultToMongodbPredictionResult = (documentId: string, predictio
     })
 }
 
-const predictionRecordsToPerformanceSummary = (records: CsvPredictionResultModel[]): PerformanceSummaryModel => {
+const predictionRecordsToPerformanceSummary = (records: CsvPredictionResultModel[], corrections: CsvPredictionCorrectionModel[] = []): PerformanceSummaryModel => {
     return records
         .reduce((result: PerformanceSummary, current: CsvPredictionResultModel) => {
             return result.addPrediction(current)
-        }, new PerformanceSummary({confidenceThreshold}))
+        }, new PerformanceSummary({confidenceThreshold, correctedRecords: corrections.length}))
         .toModel()
 }
