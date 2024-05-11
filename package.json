@@ -35,7 +35,8 @@
     "ibm-cloud-sdk-core": "^4.2.4",
     "mongodb": "^6.4.0",
     "reflect-metadata": "^0.1.13",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.2/xlsx-0.20.2.tgz"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.0.0",

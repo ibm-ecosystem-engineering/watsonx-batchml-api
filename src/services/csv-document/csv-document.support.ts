@@ -1,18 +1,68 @@
 import {parse, Parser} from 'csv-parse';
+import {extname} from 'path';
 import {PassThrough, Stream} from 'stream';
 import {Observable, Subject} from "rxjs";
+import {read as readXls, utils as xlsUtils} from "xlsx";
 
 import {
-    CsvDocumentEventAction,
+    CsvDocumentEventAction, CsvDocumentModel,
     CsvDocumentRecordModel, CsvPredictionCorrectionModel,
     CsvPredictionResultModel,
     PerformanceSummaryModel
 } from "../../models";
 
-export const parseDocumentRows = async (documentId: string, file: {filename: string, buffer: Buffer}): Promise<CsvDocumentRecordModel[]> => {
+export type FileInfo = {filename: string, buffer: Buffer}
+type FileHandler = (file: FileInfo) => Promise<CsvDocumentRecordModel[]>
+
+const ciasRE = /.*cias.*/i
+const ierpRE = /.*ierp.*/i
+
+const excelFileHandler = async ({filename, buffer}: FileInfo): Promise<CsvDocumentRecordModel[]> => {
+
+    const workbook = readXls(buffer)
+
+    const {sheetName, start} = ciasRE.test(filename)
+        ? {sheetName: 'Treasury & Tax', start: 3}
+        : (ierpRE.test(filename)
+            ? {sheetName: 'Payment Proposal Details', start: 2}
+            : {sheetName: '', start: 0})
+
+    if (!sheetName) {
+        console.log('Unable to identify worksheet for file: ' + filename)
+        throw new Error('Unable to identify worksheet for file: ' + filename)
+    }
+
+    console.log('Getting data from sheet: ' + sheetName)
+    const worksheet = workbook.Sheets[sheetName]
+
+    let csvValues: string = xlsUtils.sheet_to_csv(worksheet)
+
+    csvValues = csvValues.split('\n').slice(start).join('\n')
+
+    console.log('Headers: ', csvValues.split('\n')[0])
+
+    return await parseCsv(Buffer.from(csvValues))
+}
+
+const fileHandlers: {[key: string]: FileHandler} = {
+    '.csv': async (file: FileInfo): Promise<CsvDocumentRecordModel[]> => parseCsv(file.buffer),
+    '.xlsx': excelFileHandler,
+    '.xlsb': excelFileHandler,
+}
+
+export const parseDocumentRows = async (documentId: string, file: FileInfo): Promise<CsvDocumentRecordModel[]> => {
+
+    const extension = extname(file.filename)
+
+    const fileHandler: FileHandler | undefined = fileHandlers[extension]
+
+    if (!fileHandler) {
+        console.log('Unable to find file handler for extension: ' + extension)
+        throw new Error('Unknown file extension: ' + extension)
+    }
 
     // parse csv file
-    const documentRows: CsvDocumentRecordModel[] = await parseCsv(file.buffer)
+    const documentRows: CsvDocumentRecordModel[] = await fileHandler(file)
 
     return documentRows.map(row => {
         row.documentId = documentId;
@@ -98,10 +148,10 @@ export class PerformanceSummary implements PerformanceSummaryModel {
         this.correctedRecords = correctedRecords || 0;
     }
 
-    addPrediction({providedValue, predictionValue, confidence}: {providedValue: string, predictionValue?: string, confidence?: number}): PerformanceSummary {
+    addPrediction({agree, providedValue, predictionValue, confidence}: {providedValue: string, predictionValue?: string, confidence?: number, agree: boolean}): PerformanceSummary {
         let fieldName: keyof PerformanceSummaryModel
 
-        if (providedValue === predictionValue) {
+        if (agree || defaultCompareFn(predictionValue, providedValue)) {
             if (confidence >= this.confidenceThreshold) {
                 fieldName = 'agreeAboveThreshold'
             } else {
@@ -162,4 +212,36 @@ export class EventManager<T extends {id: string}> {
     observable(): Observable<{action: CsvDocumentEventAction, target: T}> {
         return this.subject
     }
+}
+
+export type CompareFn = (prediction: unknown, provided: unknown) => boolean
+
+export const convertValue = (value: unknown): unknown => {
+    const num = parseFloat(value as string)
+
+    if (isNaN(num)) {
+        return value
+    }
+
+    return num.valueOf()
+}
+
+export const defaultCompareFn: CompareFn = (prediction: unknown, provided: unknown): boolean => {
+    const result = convertValue(prediction) == convertValue(provided)
+
+    const buildReport = (value: unknown) => {
+        const convertedValue = convertValue(value)
+        return {
+            type: typeof value,
+            convertedType: typeof convertedValue,
+            value,
+            convertedValue
+        }
+    }
+
+    if (!result) {
+        console.log('Values do not agree: ', {prediction: buildReport(prediction), provided: buildReport(provided)})
+    }
+
+    return result
 }

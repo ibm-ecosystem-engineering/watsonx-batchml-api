@@ -1,12 +1,16 @@
-import {parse as parsePath} from 'path';
+import {extname, parse as parsePath} from 'path';
 import {Observable} from "rxjs";
 import {Collection, Db, GridFSBucket, ObjectId, OptionalId, WithId} from "mongodb";
 
 import {CsvDocumentApi, CsvDocumentPredictionResult, CsvPredictionRecordOptionsModel} from "./csv-document.api";
 import {
     bufferToStream,
+    CompareFn,
+    defaultCompareFn,
     EventManager,
-    parseDocumentRows, parsePredictionRows,
+    FileInfo,
+    parseDocumentRows,
+    parsePredictionRows,
     PerformanceSummary,
 } from "./csv-document.support";
 import {
@@ -15,16 +19,17 @@ import {
     CsvDocumentInputModel,
     CsvDocumentModel,
     CsvDocumentRecordModel,
-    CsvDocumentStatus, CsvPredictionCorrectionModel,
+    CsvDocumentStatus,
+    CsvPredictionCorrectionModel,
     CsvPredictionModel,
     CsvPredictionRecordFilter,
-    CsvPredictionResultModel, CsvUpdatedDocumentInputModel,
+    CsvPredictionResultModel,
+    CsvUpdatedDocumentInputModel,
     PerformanceSummaryModel
 } from "../../models";
 import {first, streamToBuffer} from "../../util";
 import {BatchPredictionValue} from "../batch-predictor";
 import {buildOriginalUrl, buildPredictionUrl} from "./csv-document.config";
-import {CsvPrediction, CsvPredictionCorrection} from "../../graphql-types";
 
 interface InternalCsvDocumentModel extends CsvDocumentInputModel {
     id: string;
@@ -49,14 +54,14 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
     private readonly bucket: GridFSBucket;
 
     constructor(db: Db) {
-        this.documents = db.collection<CsvDocumentModel>('csvDocuments')
-        this.documentRecords = db.collection<CsvDocumentRecordModel>('csvDocumentRecords')
+        this.documents = db.collection<CsvDocumentModel>('documents')
+        this.documentRecords = db.collection<CsvDocumentRecordModel>('documentRecords')
 
-        this.predictions = db.collection<CsvPredictionModel>('csvPredictions')
-        this.predictionRecords = db.collection<CsvPredictionResultModel>('csvPredictionResults')
-        this.predictionCorrectionRecords = db.collection<CsvPredictionCorrectionModel>('csvPredictionCorrectionResults')
+        this.predictions = db.collection<CsvPredictionModel>('predictions')
+        this.predictionRecords = db.collection<CsvPredictionResultModel>('predictionResults')
+        this.predictionCorrectionRecords = db.collection<CsvPredictionCorrectionModel>('predictionCorrectionResults')
 
-        this.bucket = new GridFSBucket(db, {bucketName: 'csvDocuments'})
+        this.bucket = new GridFSBucket(db, {bucketName: 'documents'})
     }
 
     async addCsvDocument(input: CsvDocumentInputModel, file: { filename: string; buffer: Buffer; }): Promise<CsvDocumentModel> {
@@ -65,12 +70,12 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
         const document: CsvDocumentModel = await this.insertCsvDocument(input);
 
         // upload file
-        console.log('Uploading CSV file to database')
-        const filename = await this.uploadCsvFile(file, document);
+        console.log('Uploading file to database')
+        const filename = await this.uploadDocumentFile(file, document);
 
         // insert records
-        console.log('Parsing rows from CSV doc')
-        const rows: CsvDocumentRecordModel[] = await parseDocumentRows(document.id, file)
+        console.log('Parsing rows from doc')
+        const rows: CsvDocumentRecordModel[] = await parseDocumentRows(document.id, {filename: document.name, buffer: file.buffer})
 
         console.log('Inserting csv rows: ' + rows.length)
         await this.documentRecords.insertMany(rows)
@@ -78,7 +83,7 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
         return documentEvents.add(document)
     }
 
-    async addCorrectedCsvDocument(input: CsvUpdatedDocumentInputModel, file: { filename: string; buffer: Buffer; }): Promise<CsvDocumentModel> {
+    async addCorrectedCsvDocument(input: CsvUpdatedDocumentInputModel, file: FileInfo): Promise<CsvDocumentModel> {
         console.log('Uploading updated CSV file to database')
         const filename = await this.uploadUpdatedCsvFile(file, input);
 
@@ -109,9 +114,12 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
         return undefined
     }
 
-    private uploadCsvFile(file: { filename: string; buffer: Buffer }, document: CsvDocumentModel): Promise<string | undefined> {
+    private uploadDocumentFile(file: { filename: string; buffer: Buffer }, document: CsvDocumentModel): Promise<string | undefined> {
+        console.log('Getting extension for filename: ' + document.name)
+        const extension = extname(document.name)
+
         return new Promise<string | undefined>((resolve, reject) => {
-            const filename = `${document.id}-original.csv`
+            const filename = `${document.id}-original${extension}`
 
             bufferToStream(file.buffer)
                 .pipe(this.bucket.openUploadStream(filename, {
@@ -119,6 +127,7 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
                     metadata: {
                         documentId: document.id,
                         name: document.name,
+                        extension,
                     }
                 }))
                 .on('finish', () => resolve(filename))
@@ -435,36 +444,6 @@ const predictionToMongodbPrediction = (prediction: CsvDocumentPredictionResult, 
 
 const predictionResultsToMongodbPredictionResults = (results: BatchPredictionValue[], documentId: string, predictionId: string, compareFn?: CompareFn): MongodbCsvPredictionResultModel[] => {
     return results.map(predictionResultToMongodbPredictionResult(documentId, predictionId, compareFn))
-}
-
-type CompareFn = (prediction: unknown, provided: unknown) => boolean
-
-const convertValue = (value: unknown): unknown => {
-    const num = Number(value)
-
-    if (isNaN(num)) {
-        return value
-    }
-
-    return num.valueOf()
-}
-
-const defaultCompareFn: CompareFn = (prediction: unknown, provided: unknown): boolean => {
-    const result = convertValue(prediction) == convertValue(provided)
-
-    if (!result) {
-        const buildReport = (value: unknown) => {
-            const convertedValue = convertValue(value)
-            return {
-                type: typeof value,
-                convertedType: typeof convertedValue,
-                value,
-                convertedValue
-            }
-        }
-    }
-
-    return result
 }
 
 const predictionResultToMongodbPredictionResult = (documentId: string, predictionId: string, compareFn: CompareFn = defaultCompareFn) => {

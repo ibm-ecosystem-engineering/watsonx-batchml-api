@@ -42,7 +42,7 @@ export class CsvDocumentController {
     })
     async submitCsvDocument(@Body() input: CsvDocumentInput, @UploadedFile() file?: Express.Multer.File): Promise<CsvDocumentModel> {
 
-        console.log('Received CSV document')
+        console.log('Received document')
 
         return this.service.addCsvDocument(input, file)
             .then((result) => {
