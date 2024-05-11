@@ -67,7 +67,7 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
     async addCsvDocument(input: CsvDocumentInputModel, file: { filename: string; buffer: Buffer; }): Promise<CsvDocumentModel> {
 
         // insert document
-        const document: CsvDocumentModel = await this.insertCsvDocument(input);
+        const document: CsvDocumentModel = await this.insertCsvDocument(Object.assign(input, {status: CsvDocumentStatus.InProgress}));
 
         // upload file
         console.log('Uploading file to database')
@@ -194,7 +194,9 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
             console.log('No prediction results')
         }
 
-        documentEvents.update({id: documentId})
+        await this.documents
+            .updateOne({_id: new ObjectId(documentId)}, {$set: {status: CsvDocumentStatus.Completed}})
+            .then(() => documentEvents.update({id: documentId}))
 
         return predictionEvents.add(csvPrediction);
     }
