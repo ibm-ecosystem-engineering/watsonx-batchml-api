@@ -1,6 +1,6 @@
 import {extname, parse as parsePath} from 'path';
 import {Observable} from "rxjs";
-import {Collection, Db, GridFSBucket, ObjectId, OptionalId, WithId} from "mongodb";
+import {Collection, Db, Document, GridFSBucket, ObjectId, OptionalId, WithId} from "mongodb";
 
 import {CsvDocumentApi, CsvDocumentPredictionResult, CsvPredictionRecordOptionsModel} from "./csv-document.api";
 import {
@@ -12,6 +12,7 @@ import {
     parseDocumentRows,
     parsePredictionRows,
     PerformanceSummary,
+    StatAggregation,
 } from "./csv-document.support";
 import {
     CsvDocumentEventAction,
@@ -24,8 +25,9 @@ import {
     CsvPredictionModel,
     CsvPredictionRecordFilter,
     CsvPredictionResultModel,
-    CsvUpdatedDocumentInputModel,
-    PerformanceSummaryModel
+    CsvUpdatedDocumentInputModel, PaginationInputModel, PaginationResultModel,
+    PerformanceSummaryModel,
+    PredictionPerformanceSummaryModel
 } from "../../models";
 import {first, streamToBuffer} from "../../util";
 import {BatchPredictionValue} from "../batch-predictor";
@@ -45,6 +47,17 @@ const predictionEvents: EventManager<CsvPredictionModel> = new EventManager<CsvP
 type MongodbCsvPredictionModel = OptionalId<Omit<CsvPredictionModel, 'id | predictions | performanceSummary | date'> & {date: Date}>
 type MongodbCsvPredictionResultModel = OptionalId<CsvPredictionResultModel>
 
+const aggregateStats = (stat: keyof PerformanceSummaryModel) => {
+    return (docs: Document[]): StatAggregation[] => docs.map(doc => ({predictionId: doc._id, count: doc.count, stat}))
+}
+
+const summaryPipeline = (ids: string[], match: Partial<{[key in keyof CsvPredictionResultModel]: unknown}> = {}) => {
+    return [
+        {$match: {predictionId: {$in: ids}}},
+        {$group: {_id: "$predictionId", count: {$sum: 1}}}
+    ]
+}
+
 export class CsvDocumentMongodb implements CsvDocumentApi {
     private readonly documents: Collection<CsvDocumentModel>;
     private readonly documentRecords: Collection<CsvDocumentRecordModel>;
@@ -62,6 +75,34 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
         this.predictionCorrectionRecords = db.collection<CsvPredictionCorrectionModel>('predictionCorrectionResults')
 
         this.bucket = new GridFSBucket(db, {bucketName: 'documents'})
+    }
+
+    async init(): Promise<CsvDocumentMongodb> {
+        console.log('Creating indexes')
+
+        await this.documentRecords.createIndex({documentId: 1}, {name: 'documentRecords-documentId'})
+            .catch(err => console.log('Error creating index: documentRecords-documentId', err))
+
+        await this.predictions.createIndex({documentId: 1}, {name: 'predictions-documentId'})
+            .catch(err => console.log('Error creating index: predictions-documentId', err))
+
+        await this.predictionRecords.createIndex({predictionId: 1}, {name: 'predictionRecords-predictionId'})
+            .catch(err => console.log('Error creating index: predictionRecords-predictionId', err))
+        await this.predictionRecords.createIndex({predictionId: 1, agree: 1}, {name: 'predictionRecords-predictionId-agree'})
+            .catch(err => console.log('Error creating index: predictionRecords-predictionId-agree', err))
+        await this.predictionRecords.createIndex({predictionId: 1, confidence: -1}, {name: 'predictionRecords-predictionId-confidence'})
+            .catch(err => console.log('Error creating index: predictionRecords-predictionId-confidence', err))
+        await this.predictionRecords.createIndex({agree: 1, confidence: -1}, {name: 'predictionRecords-agree-confidence'})
+            .catch(err => console.log('Error creating index: predictionRecords-agree-confidence', err))
+        await this.predictionRecords.createIndex({predictionId: 1, agree: 1, confidence: -1}, {name: 'predictionRecords-predictionId-agree-confidence'})
+            .catch(err => console.log('Error creating index: predictionRecords-predictionId-agree-confidence', err))
+
+        await this.predictionCorrectionRecords.createIndex({documentId: 1}, {name: 'predictionCorrectionRecords-documentId'})
+            .catch(err => console.log('Error creating index: predictionRecords-documentId', err))
+        await this.predictionCorrectionRecords.createIndex({predictionId: 1}, {name: 'predictionCorrectionRecords-predictionId'})
+            .catch(err => console.log('Error creating index: predictionRecords-predictionId', err))
+
+        return this
     }
 
     async addCsvDocument(input: CsvDocumentInputModel, file: { filename: string; buffer: Buffer; }): Promise<CsvDocumentModel> {
@@ -89,10 +130,10 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
 
         const rows: CsvPredictionCorrectionModel[] = await parsePredictionRows(input, file)
 
-        const originalPredictionRecords: CsvPredictionResultModel[] = await this.listPredictionRecords(input.predictionId)
+        const originalPredictionRecords: PaginationResultModel<CsvPredictionResultModel> = await this.listPredictionRecords(input.predictionId, {page: 1, pageSize: -1})
 
         const changedRows: CsvPredictionCorrectionModel[] = rows.filter((row: CsvPredictionCorrectionModel) => {
-            const originalRecord = first(originalPredictionRecords.filter(record => record.id === row.predictionRecordId))
+            const originalRecord = first(originalPredictionRecords.data.filter(record => record.id === row.predictionRecordId))
 
             if (!originalRecord) {
                 console.log('  Unable to find original prediction record: ' + row.predictionRecordId)
@@ -176,12 +217,29 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
             });
     }
 
-    async listCsvDocumentRecords(documentId: string): Promise<CsvDocumentRecordModel[]> {
+    async listCsvDocumentRecords(documentId: string, {page, pageSize}: PaginationInputModel): Promise<PaginationResultModel<CsvDocumentRecordModel>> {
+        const dataFilter = pageSize === -1
+            ? [{$skip: (page - 1) * pageSize}]
+            : [{$skip: (page - 1) * pageSize}, {$limit: pageSize}]
 
-        return this.documentRecords
-            .find({documentId})
-            .map(record => Object.assign({}, record, {id: record._id.toString()}))
+        const result: Document[] = await this.documentRecords
+            .aggregate([
+                {
+                    $match: {documentId}
+                },
+                {
+                    $facet: {
+                        metadata: [{$count: 'totalCount'}],
+                        data: dataFilter,
+                    },
+                }
+            ])
             .toArray()
+
+        return {
+            metadata: {totalCount: result[0].metadata[0].totalCount, page, pageSize},
+            data: result[0].data.map(val => Object.assign({}, val, {id: val._id})),
+        }
     }
 
     async addCsvDocumentPrediction(documentId: string, prediction: CsvDocumentPredictionResult): Promise<CsvPredictionModel> {
@@ -227,31 +285,107 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
         return {filename: document.name, buffer}
     }
 
-    async getPredictionPerformanceSummary(predictionId: string): Promise<PerformanceSummaryModel> {
-        const rows = await this.predictionRecords
-            .find({
-                predictionId
-            })
-            .toArray()
+    async getPredictionPerformanceSummary(predictionId: string): Promise<PredictionPerformanceSummaryModel> {
+        const result = await this.getPredictionPerformanceSummaries([predictionId])
 
-        const corrections = await this.predictionCorrectionRecords
-            .find({
-                predictionId
-            })
-            .toArray()
+        if (result.length === 0) {
+            throw new Error('Performance summary missing!')
+        }
 
-        return predictionRecordsToPerformanceSummary(rows, corrections)
+        return result[0]
     }
 
-    async listCsvDocuments(status?: CsvDocumentStatus): Promise<CsvDocumentModel[]> {
+    async getPredictionPerformanceSummaries(predictionIds: string[]): Promise<PredictionPerformanceSummaryModel[]> {
+        return await this.calculateSummaryMatrix(predictionIds)
+    }
 
-        const query = status ? {status} : {}
+    private async calculateSummaryMatrix(predictionIds: string[]): Promise<PredictionPerformanceSummaryModel[]> {
+        // {$match: {predictionId: {$in: ids}}},
+        // {$group: {_id: "$predictionId", count: {$sum: 1}}}
 
-        const result = this.documents
-            .find(query)
-            .map((doc: WithId<CsvDocumentModel>) => Object.assign({}, doc, {id: doc._id}))
+        const result = first(await this.predictionRecords
+            .aggregate([
+                {
+                    $match: {predictionId: {$in: predictionIds}}
+                },
+                {
+                    $facet: {
+                        totalCount: [
+                            {$group: {_id: "$predictionId", count: {$sum: 1}}}
+                        ],
+                        agreeAboveThreshold: [
+                            {$match: {agree: true, confidence: {$gte: confidenceThreshold}}},
+                            {$group: {_id: "$predictionId", count: {$sum: 1}}}
+                        ],
+                        agreeBelowThreshold: [
+                            {$match: {agree: true, confidence: {$lt: confidenceThreshold}}},
+                            {$group: {_id: "$predictionId", count: {$sum: 1}}}
+                        ],
+                        disagreeAboveThreshold: [
+                            {$match: {agree: false, confidence: {$gte: confidenceThreshold}}},
+                            {$group: {_id: "$predictionId", count: {$sum: 1}}}
+                        ],
+                        disagreeBelowThreshold: [
+                            {$match: {agree: false, confidence: {$lt: confidenceThreshold}}},
+                            {$group: {_id: "$predictionId", count: {$sum: 1}}}
+                        ]
+                    }
+                }
+            ])
+            .toArray())
 
-        return result.toArray()
+        const correctedRecords: StatAggregation[] = await this.predictionCorrectionRecords
+            .aggregate(summaryPipeline(predictionIds))
+            .toArray()
+            .then(aggregateStats('correctedRecords'));
+
+        return Object.keys(result)
+            .flatMap((stat: keyof PerformanceSummaryModel): StatAggregation => {
+                return result[stat].map((val: Document): StatAggregation => ({predictionId: val._id, count: val.count, stat}))
+            })
+            .concat(correctedRecords)
+            .reduce((result: PerformanceSummary[], current: StatAggregation) => {
+                let currentSummary: PerformanceSummary = first(result.filter(val => val.predictionId === current.predictionId))
+                if (!currentSummary) {
+                    currentSummary = new PerformanceSummary({predictionId: current.predictionId, confidenceThreshold})
+
+                    result.push(currentSummary)
+                }
+
+                currentSummary.addStat(current)
+
+                return result
+            }, [])
+    }
+
+    async listCsvDocuments({page, pageSize}: PaginationInputModel, status?: CsvDocumentStatus): Promise<PaginationResultModel<CsvDocumentModel>> {
+
+        const pipeline = []
+
+        if (status) {
+            pipeline.push({$match: {status}})
+        }
+
+        const dataFilter = pageSize === -1
+            ? [{$skip: (page - 1) * pageSize}]
+            : [{$skip: (page - 1) * pageSize}, {$limit: pageSize}]
+
+        pipeline.push({
+            $facet: {
+                metadata: [{$count: 'totalCount'}],
+                data: dataFilter,
+            },
+        })
+
+        const results: Document[] = await this.documents
+            .aggregate(pipeline)
+            .toArray()
+
+        return {
+            metadata: {totalCount: results[0].metadata[0].totalCount, page, pageSize},
+            data: results[0].data.map(val => Object.assign({}, val, {id: val._id})),
+        }
+
     }
 
     async getCsvDocument(id: string): Promise<CsvDocumentModel> {
@@ -278,7 +412,7 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
         return documentEvents.observable();
     }
 
-    async listPredictionRecords(predictionId: string, {filter}: CsvPredictionRecordOptionsModel = {}): Promise<CsvPredictionResultModel[]> {
+    async listPredictionRecords(predictionId: string, {page, pageSize}: PaginationInputModel, {filter}: CsvPredictionRecordOptionsModel = {}): Promise<PaginationResultModel<CsvPredictionResultModel>> {
 
         const query: Partial<{[k in keyof CsvPredictionResultModel]: unknown}> = {predictionId}
 
@@ -291,18 +425,45 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
 
         console.log('Querying prediction records: ', {filter, query})
 
-        return this.predictionRecords
-            .find(query)
-            .map((predictionResult: WithId<CsvPredictionResultModel>) => Object.assign({}, predictionResult, {id: predictionResult._id.toString()}))
+        const dataFilter = pageSize === -1
+            ? [{$skip: (page - 1) * pageSize}]
+            : [{$skip: (page - 1) * pageSize}, {$limit: pageSize}]
+
+        const results = await this.predictionRecords
+            .aggregate([
+                {
+                    $match: query
+                },
+                {
+                    $facet: {
+                        metadata: [{$count: 'totalCount'}],
+                        data: dataFilter,
+                    },
+                }
+            ])
             .toArray()
+
+        return {
+            metadata: {totalCount: results[0].metadata[0].totalCount, page, pageSize},
+            data: results[0].data.map(val => Object.assign({}, val, {id: val._id})),
+        }
     }
 
     async listCsvPredictions(documentId: string): Promise<CsvPredictionModel[]> {
 
         return this.findPredictions(documentId)
-            .then(results => this.populatePredictionRecords(documentId, results))
-            .then(results => this.populateCorrectionRecords(results))
-            .then(results => this.populatePerformanceSummary(results))
+            .then(async results => {
+                const summaries = await this.getPredictionPerformanceSummaries(results.map(val => val.id))
+
+                return results.map(val => {
+                    val.performanceSummary = first(summaries.filter(s => val.id === s.predictionId))
+
+                    return val
+                })
+            })
+            // .then(results => this.populatePredictionRecords(documentId, results))
+            // .then(results => this.populateCorrectionRecords(results))
+            // .then(results => this.populatePerformanceSummary(results))
     }
 
     async getCsvPrediction(predictionId: string): Promise<CsvPredictionModel> {
@@ -315,11 +476,11 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
         const document = await this.getCsvDocument(id)
         const prediction = await this.getCsvPrediction(predictionId)
         // TODO optimize query
-        const documentRecords = await this.listCsvDocumentRecords(id)
-        const predictionRecords = await this.listPredictionRecords(predictionId)
+        const documentRecords = await this.listCsvDocumentRecords(id, {page: 1, pageSize: -1})
+        const predictionRecords = await this.listPredictionRecords(predictionId, {page: 1, pageSize: -1})
 
-        const values = predictionRecords.map(val => {
-            const docRecord: CsvDocumentRecordModel | undefined = first(documentRecords.filter(doc => doc.id === val.csvRecordId))
+        const values = predictionRecords.data.map(val => {
+            const docRecord: CsvDocumentRecordModel | undefined = first(documentRecords.data.filter(doc => doc.id === val.csvRecordId))
 
             if (!docRecord) {
                 console.log('Unable to find matching document record: ' + val.csvRecordId)
@@ -365,60 +526,6 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
         return await predictionResult.toArray()
     }
 
-    private async populatePredictionRecords(documentId: string, predictions: CsvPredictionModel[]): Promise<CsvPredictionModel[]> {
-
-        const predictionMap: {[id: string]: CsvPredictionModel} = predictions
-            .reduce((result: {[id: string]: CsvPredictionModel}, current: CsvPredictionModel) => {
-                result[current.id] = current
-
-                return result
-            }, {})
-
-        const predictionRecordResult = this.predictionRecords
-            .find({documentId})
-            .map((predictionResult: WithId<CsvPredictionResultModel>) => Object.assign({}, predictionResult, {id: predictionResult._id.toString()}))
-
-        const predictionRecords: CsvPredictionResultModel[] = await predictionRecordResult.toArray()
-
-        predictionRecords.forEach(record => {
-            const prediction: CsvPredictionModel = predictionMap[record.predictionId]
-
-            if (!prediction) {
-                console.log(`Prediction not found: ` + record.predictionId)
-                return
-            }
-
-            prediction.predictions.push(record)
-        })
-
-        return predictions
-    }
-
-    private async populateCorrectionRecords(predictions: CsvPredictionModel[]): Promise<CsvPredictionModel[]> {
-        const correctionRecords: CsvPredictionCorrectionModel[] = await this.predictionCorrectionRecords
-            .find({
-                predictionId: {$in: predictions.map(val => val.id)}
-            })
-            .toArray()
-            .then(results => results.map(val => Object.assign({}, val, {id: val._id})))
-
-        return predictions.map(prediction => {
-            const corrections = correctionRecords.filter(c => c.predictionId === prediction.id)
-
-            return Object.assign({}, prediction, {corrections})
-        })
-    }
-
-    private async populatePerformanceSummary(predictions: CsvPredictionModel[]): Promise<CsvPredictionModel[]> {
-        return predictions.map(p => Object.assign(
-            {},
-            p,
-            {
-                performanceSummary: predictionRecordsToPerformanceSummary(p.predictions, p.corrections)
-            }
-        ))
-    }
-
     observeCsvPredictionUpdates(): Observable<{action: CsvDocumentEventAction, target: CsvPredictionModel}> {
         return predictionEvents.observable();
     }
@@ -461,12 +568,4 @@ const predictionResultToMongodbPredictionResult = (documentId: string, predictio
         predictionId,
         id: undefined
     })
-}
-
-const predictionRecordsToPerformanceSummary = (records: CsvPredictionResultModel[], corrections: CsvPredictionCorrectionModel[] = []): PerformanceSummaryModel => {
-    return records
-        .reduce((result: PerformanceSummary, current: CsvPredictionResultModel) => {
-            return result.addPrediction(current)
-        }, new PerformanceSummary({confidenceThreshold, correctedRecords: corrections.length}))
-        .toModel()
 }

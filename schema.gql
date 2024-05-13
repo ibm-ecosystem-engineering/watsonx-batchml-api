@@ -97,6 +97,37 @@ type Mutation {
   deleteCsvDocument(id: ID!): Record!
 }
 
+"""Paginated CsvDocumentRecords"""
+type PaginatedCsvDocumentRecords {
+  data: [CsvDocumentRecord!]!
+  metadata: PaginationMetadata!
+}
+
+"""Paginated CsvDocumentModel"""
+type PaginatedCsvDocuments {
+  data: [CsvDocument!]!
+  metadata: PaginationMetadata!
+}
+
+"""Paginated CsvPredictionResults"""
+type PaginatedCsvPredictionResults {
+  data: [CsvPredictionResult!]!
+  metadata: PaginationMetadata!
+}
+
+"""Pagination input"""
+input PaginationInput {
+  page: Float!
+  pageSize: Float!
+}
+
+"""Pagination metadata"""
+type PaginationMetadata {
+  page: Float!
+  pageSize: Float!
+  totalCount: Float!
+}
+
 """Performance Summary"""
 type PerformanceSummary {
   agreeAboveThreshold: Float!
@@ -112,9 +143,9 @@ type Query {
   getCsvDocument(id: ID!): CsvDocument!
   getCsvPrediction(id: ID!): [CsvPrediction!]!
   helloWorld: Greeting!
-  listCsvDocumentRecords(id: ID!): [CsvDocumentRecord!]!
-  listCsvDocuments(status: CsvDocumentStatusFilter): [CsvDocument!]!
-  listCsvPredictionRecords(id: ID!, options: CsvPredictionRecordOptions): [CsvPredictionResult!]!
+  listCsvDocumentRecords(id: ID!, pagination: PaginationInput): PaginatedCsvDocumentRecords!
+  listCsvDocuments(pagination: PaginationInput, status: CsvDocumentStatusFilter): PaginatedCsvDocuments!
+  listCsvPredictionRecords(id: ID!, options: CsvPredictionRecordOptions, pagination: PaginationInput): PaginatedCsvPredictionResults!
   listCsvPredictions(id: ID!): [CsvPrediction!]!
 }
 

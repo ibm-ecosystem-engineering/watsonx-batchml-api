@@ -9,8 +9,8 @@ export * from './csv-document.config'
 
 const config: MongodbConfig | undefined = mongodbConfig()
 
-let _instance: CsvDocumentApi;
-export const csvDocumentApi = (): CsvDocumentApi => {
+let _instance: Promise<CsvDocumentApi>;
+export const csvDocumentApi = async (): Promise<CsvDocumentApi> => {
     if (_instance) {
         return _instance
     }
@@ -21,7 +21,7 @@ export const csvDocumentApi = (): CsvDocumentApi => {
     }
 
     console.log('  ** CsvDocumentApi: CsvDocumentMongodb')
-    return _instance = new CsvDocumentMongodb(mongodbClient())
+    return _instance = new CsvDocumentMongodb(mongodbClient()).init()
 }
 
 export const csvDocumentProvider: Provider = {
