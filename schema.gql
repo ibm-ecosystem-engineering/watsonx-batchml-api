@@ -80,6 +80,7 @@ type CsvPredictionResult {
   agree: Boolean
   confidence: Float!
   csvRecordId: String!
+  data: String
   documentId: String!
   id: ID!
   predictionId: String!

@@ -88,6 +88,7 @@ export interface CsvPredictionResultModel {
     predictionValue: string;
     agree: boolean;
     confidence: number;
+    data?: string;
 }
 
 export interface CsvPredictionCorrectionModel {

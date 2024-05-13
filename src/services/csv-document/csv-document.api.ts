@@ -14,6 +14,7 @@ import {
     PerformanceSummaryModel
 } from "../../models";
 import {BatchPredictionValue} from "../batch-predictor";
+import {Stream} from "stream";
 
 export class DocumentNotFound extends Error {
     errType = 'DocumentNotFound'
@@ -44,7 +45,7 @@ export abstract class CsvDocumentApi {
     abstract listCsvDocuments(pagination: PaginationInputModel, status?: CsvDocumentStatus): Promise<PaginationResultModel<CsvDocumentModel>>
     abstract getCsvDocument(id: string): Promise<CsvDocumentModel>
     abstract deleteCsvDocument(id: string): Promise<{id: string}>
-    abstract getOriginalCsvDocument(id: string): Promise<{filename: string, buffer: Buffer}>
+    abstract getOriginalCsvDocument(id: string): Promise<{filename: string, stream: Stream}>
 
     abstract listCsvDocumentRecords(documentId: string, paginationOptions: PaginationInputModel): Promise<PaginationResultModel<CsvDocumentRecordModel>>
 
@@ -52,7 +53,7 @@ export abstract class CsvDocumentApi {
     abstract listCsvPredictions(documentId: string): Promise<CsvPredictionModel[]>
     abstract getPredictionPerformanceSummary(predictionId: string): Promise<PerformanceSummaryModel>
     abstract listPredictionRecords(predictionId: string, paginationOptions: PaginationInputModel, options?: CsvPredictionRecordOptionsModel): Promise<PaginationResultModel<CsvPredictionResultModel>>
-    abstract getPredictionDocument(id: string, predictionId: string, name: string): Promise<{buffer: Buffer, filename: string}>
+    abstract getPredictionDocument(id: string, predictionId: string, name: string): Promise<{stream: Stream, filename: string}>
     abstract getCsvPrediction(predictionId: string): Promise<CsvPredictionModel>
 
     abstract observeCsvDocumentUpdates(): Observable<CsvDocumentEventModel>
