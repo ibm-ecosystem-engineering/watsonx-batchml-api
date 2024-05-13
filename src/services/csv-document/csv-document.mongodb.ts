@@ -428,37 +428,44 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
 
         console.log('Querying prediction records: ', {filter, query, page, pageSize})
 
-        const dataFilter = pageSize === -1
-            ? [{$skip: (page - 1) * pageSize}]
-            : [{$skip: (page - 1) * pageSize}, {$limit: pageSize}]
-
         const results = await this.predictionRecords
             .aggregate([
                 {
-                    $match: query
-                },
-                {
-                    $addFields: {
-                        recordId: { $toObjectId: '$csvRecordId' },
-                        id: { $toString: '$_id' },
-                    }
-                },
-                {
-                    $lookup: {
-                        from: 'documentRecords',
-                        localField: 'recordId',
-                        foreignField: '_id',
-                        as: 'csvRecord'
-                    }
-                },
-                {
-                    $replaceRoot: { newRoot: { $mergeObjects: [ { $arrayElemAt: [ "$csvRecord", 0 ] }, "$$ROOT" ] } }
+                    $match: query,
                 },
                 {
                     $facet: {
-                        metadata: [{$count: 'totalCount'}],
-                        data: dataFilter,
-                    },
+                        metadata: [
+                            {
+                                $count: 'totalCount',
+                            }
+                        ],
+                        data: [
+                            {
+                                $skip: (page -1 ) * pageSize,
+                            },
+                            {
+                                $limit: pageSize === -1 ? Number.MAX_SAFE_INTEGER : pageSize,
+                            },
+                            {
+                                $addFields: {
+                                    recordId: { $toObjectId: '$csvRecordId' },
+                                    id: { $toString: '$_id' },
+                                }
+                            },
+                            {
+                                $lookup: {
+                                    from: 'documentRecords',
+                                    localField: 'recordId',
+                                    foreignField: '_id',
+                                    as: 'csvRecord'
+                                }
+                            },
+                            {
+                                $replaceRoot: { newRoot: { $mergeObjects: [ { $arrayElemAt: [ "$csvRecord", 0 ] }, "$$ROOT" ] } }
+                            },
+                        ]
+                    }
                 }
             ])
             .toArray()
