@@ -5,10 +5,12 @@ import {Observable, Subject} from "rxjs";
 import {read as readXls, utils as xlsUtils} from "xlsx";
 
 import {
-    CsvDocumentEventAction, CsvDocumentModel,
-    CsvDocumentRecordModel, CsvPredictionCorrectionModel,
+    CsvDocumentEventAction,
+    CsvDocumentRecordModel,
+    CsvPredictionCorrectionModel,
     CsvPredictionResultModel,
-    PerformanceSummaryModel
+    PerformanceSummaryModel,
+    PredictionPerformanceSummaryModel
 } from "../../models";
 
 export type FileInfo = {filename: string, buffer: Buffer}
@@ -129,7 +131,9 @@ const parseCsvStream = async <T = any>(parser: Parser, stream: Stream): Promise<
     })
 }
 
-export class PerformanceSummary implements PerformanceSummaryModel {
+export type StatAggregation = {predictionId: string, stat: keyof PerformanceSummaryModel, count: number}
+
+export class PerformanceSummary implements PredictionPerformanceSummaryModel {
     totalCount: number = 0;
     agreeAboveThreshold: number = 0;
     agreeBelowThreshold: number = 0;
@@ -137,8 +141,9 @@ export class PerformanceSummary implements PerformanceSummaryModel {
     disagreeBelowThreshold: number = 0;
     confidenceThreshold: number;
     correctedRecords: number;
+    predictionId: string;
 
-    constructor({confidenceThreshold, totalCount, agreeAboveThreshold, agreeBelowThreshold, disagreeBelowThreshold, disagreeAboveThreshold, correctedRecords}: Partial<PerformanceSummaryModel> = {}) {
+    constructor({predictionId, confidenceThreshold, totalCount, agreeAboveThreshold, agreeBelowThreshold, disagreeBelowThreshold, disagreeAboveThreshold, correctedRecords}: Partial<PredictionPerformanceSummaryModel> = {}) {
         this.totalCount = totalCount || 0;
         this.agreeBelowThreshold = agreeAboveThreshold || 0;
         this.agreeBelowThreshold = agreeBelowThreshold || 0;
@@ -146,6 +151,13 @@ export class PerformanceSummary implements PerformanceSummaryModel {
         this.disagreeBelowThreshold = disagreeBelowThreshold || 0;
         this.confidenceThreshold = confidenceThreshold || 0.8;
         this.correctedRecords = correctedRecords || 0;
+        this.predictionId = predictionId;
+    }
+
+    addStat(stat: StatAggregation): PerformanceSummary {
+        this[stat.stat] = stat.count
+
+        return this;
     }
 
     addPrediction({agree, providedValue, predictionValue, confidence}: {providedValue: string, predictionValue?: string, confidence?: number, agree: boolean}): PerformanceSummary {
@@ -171,7 +183,7 @@ export class PerformanceSummary implements PerformanceSummaryModel {
         return this;
     }
 
-    toModel(): PerformanceSummaryModel {
+    toModel(): PredictionPerformanceSummaryModel {
         return {
             totalCount: this.totalCount,
             agreeBelowThreshold: this.agreeBelowThreshold,
@@ -180,6 +192,7 @@ export class PerformanceSummary implements PerformanceSummaryModel {
             disagreeAboveThreshold: this.disagreeAboveThreshold,
             confidenceThreshold: this.confidenceThreshold,
             correctedRecords: this.correctedRecords,
+            predictionId: this.predictionId,
         }
     }
 }
@@ -237,10 +250,6 @@ export const defaultCompareFn: CompareFn = (prediction: unknown, provided: unkno
             value,
             convertedValue
         }
-    }
-
-    if (!result) {
-        console.log('Values do not agree: ', {prediction: buildReport(prediction), provided: buildReport(provided)})
     }
 
     return result

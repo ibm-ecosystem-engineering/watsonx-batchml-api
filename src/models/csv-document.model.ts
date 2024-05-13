@@ -112,6 +112,10 @@ export interface PerformanceSummaryModel {
     correctedRecords: number;
 }
 
+export interface PredictionPerformanceSummaryModel extends PerformanceSummaryModel {
+    predictionId: string;
+}
+
 export interface CsvDocumentRowModel {
     [key: string]: unknown
 }

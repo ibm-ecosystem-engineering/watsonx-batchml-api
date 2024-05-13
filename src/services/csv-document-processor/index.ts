@@ -8,13 +8,13 @@ import {aiModelApi} from "../ai-model";
 export * from './csv-document-processor.api'
 
 let _instance: CsvDocumentProcessor
-export const csvDocumentProcessor = () => {
+export const csvDocumentProcessor = async (): Promise<CsvDocumentProcessor> => {
     if (_instance) {
         return _instance
     }
 
     return _instance = new CsvDocumentProcessor(
-        csvDocumentApi(),
+        await csvDocumentApi(),
         batchPredictorApi(),
         aiModelApi(),
     )

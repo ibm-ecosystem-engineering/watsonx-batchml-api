@@ -5,6 +5,10 @@ import {
     CsvPrediction,
     CsvPredictionRecordOptions,
     CsvPredictionResult,
+    PaginatedCsvDocumentRecords,
+    PaginatedCsvDocuments,
+    PaginatedCsvPredictionResults,
+    PaginationInput,
     Record
 } from "../../graphql-types";
 import {
@@ -16,7 +20,7 @@ import {
     CsvDocumentStatusFilter,
     CsvPredictionModel,
     CsvPredictionResultModel,
-    mapDocumentFilterStatus
+    mapDocumentFilterStatus, PaginationInputBuilder, PaginationInputModel, PaginationResultModel
 } from "../../models";
 import {CsvDocumentApi, CsvDocumentProcessorApi, CsvPredictionRecordOptionsModel} from "../../services";
 import {PubSub} from "graphql-subscriptions";
@@ -44,13 +48,14 @@ export class CsvDocumentResolver {
             })
     }
 
-    @Query(returns => [CsvDocument])
+    @Query(returns => PaginatedCsvDocuments)
     async listCsvDocuments(
+        @Args('pagination', {nullable: true, type: () => PaginationInput}) pagination?: PaginationInputModel,
         @Args('status', { nullable: true, type: () => CsvDocumentStatusFilter }) status?: CsvDocumentStatusFilter
-    ): Promise<CsvDocumentModel[]> {
+    ): Promise<PaginationResultModel<CsvDocumentModel>> {
         const filterStatus: CsvDocumentStatus | undefined = mapDocumentFilterStatus(status)
 
-        return this.service.listCsvDocuments(filterStatus);
+        return this.service.listCsvDocuments(PaginationInputBuilder(pagination), filterStatus);
     }
 
     @Query(returns => CsvDocument)
@@ -60,19 +65,21 @@ export class CsvDocumentResolver {
         return this.service.getCsvDocument(id)
     }
 
-    @Query(returns =>  [CsvDocumentRecord])
+    @Query(returns =>  PaginatedCsvDocumentRecords)
     async listCsvDocumentRecords(
-        @Args('id', { type: () => ID }) id: string
-    ): Promise<CsvDocumentRecordModel[]> {
-        return this.service.listCsvDocumentRecords(id)
+        @Args('id', { type: () => ID }) id: string,
+        @Args('pagination', { type: () => PaginationInput, nullable: true }) pagination?: PaginationInputModel,
+    ): Promise<PaginationResultModel<CsvDocumentRecordModel>> {
+        return this.service.listCsvDocumentRecords(id, PaginationInputBuilder(pagination))
     }
 
-    @Query(returns =>  [CsvPredictionResult])
+    @Query(returns =>  PaginatedCsvPredictionResults)
     async listCsvPredictionRecords(
         @Args('id', { type: () => ID }) id: string,
+        @Args('pagination', { type: () => PaginationInput, nullable: true }) pagination?: PaginationInputModel,
         @Args('options', {type: () => CsvPredictionRecordOptions, nullable: true}) options?: CsvPredictionRecordOptionsModel
-    ): Promise<CsvPredictionResultModel[]> {
-        return this.service.listPredictionRecords(id, options)
+    ): Promise<PaginationResultModel<CsvPredictionResultModel>> {
+        return this.service.listPredictionRecords(id, PaginationInputBuilder(pagination), options)
     }
 
     @Query(returns =>  [CsvPrediction])

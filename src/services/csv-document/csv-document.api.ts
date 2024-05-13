@@ -10,6 +10,7 @@ import {
     CsvPredictionRecordFilter,
     CsvPredictionResultModel,
     CsvUpdatedDocumentInputModel,
+    PaginationInputModel, PaginationResultModel,
     PerformanceSummaryModel
 } from "../../models";
 import {BatchPredictionValue} from "../batch-predictor";
@@ -40,17 +41,17 @@ export abstract class CsvDocumentApi {
     abstract addCsvDocument(input: CsvDocumentInputModel, file: {filename: string, buffer: Buffer}): Promise<CsvDocumentModel>
     abstract addCorrectedCsvDocument(input: CsvUpdatedDocumentInputModel, file: {filename: string, buffer: Buffer}): Promise<CsvDocumentModel>
 
-    abstract listCsvDocuments(status?: CsvDocumentStatus): Promise<CsvDocumentModel[]>
+    abstract listCsvDocuments(pagination: PaginationInputModel, status?: CsvDocumentStatus): Promise<PaginationResultModel<CsvDocumentModel>>
     abstract getCsvDocument(id: string): Promise<CsvDocumentModel>
     abstract deleteCsvDocument(id: string): Promise<{id: string}>
     abstract getOriginalCsvDocument(id: string): Promise<{filename: string, buffer: Buffer}>
 
-    abstract listCsvDocumentRecords(documentId: string): Promise<CsvDocumentRecordModel[]>
+    abstract listCsvDocumentRecords(documentId: string, paginationOptions: PaginationInputModel): Promise<PaginationResultModel<CsvDocumentRecordModel>>
 
     abstract addCsvDocumentPrediction(documentId: string, prediction: CsvDocumentPredictionResult): Promise<CsvPredictionModel>
     abstract listCsvPredictions(documentId: string): Promise<CsvPredictionModel[]>
     abstract getPredictionPerformanceSummary(predictionId: string): Promise<PerformanceSummaryModel>
-    abstract listPredictionRecords(predictionId: string, options?: CsvPredictionRecordOptionsModel): Promise<CsvPredictionResultModel[]>
+    abstract listPredictionRecords(predictionId: string, paginationOptions: PaginationInputModel, options?: CsvPredictionRecordOptionsModel): Promise<PaginationResultModel<CsvPredictionResultModel>>
     abstract getPredictionDocument(id: string, predictionId: string, name: string): Promise<{buffer: Buffer, filename: string}>
     abstract getCsvPrediction(predictionId: string): Promise<CsvPredictionModel>
 

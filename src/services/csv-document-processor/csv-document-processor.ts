@@ -5,7 +5,7 @@ import {
     CsvDocumentEventAction,
     CsvDocumentEventModel,
     CsvDocumentRecordModel,
-    CsvPredictionModel
+    CsvPredictionModel, PaginationResultModel
 } from "../../models";
 import {CsvDocumentProcessorApi} from "./csv-document-processor.api";
 import {AiModelApi} from "../ai-model";
@@ -37,9 +37,9 @@ export class CsvDocumentProcessor implements CsvDocumentProcessorApi {
     }
 
     async createCsvPrediction(documentId: string, model?: string): Promise<CsvPredictionModel> {
-        const data: CsvDocumentRecordModel[] = await this.service.listCsvDocumentRecords(documentId)
+        const data: PaginationResultModel<CsvDocumentRecordModel> = await this.service.listCsvDocumentRecords(documentId, {page: 1, pageSize: -1})
 
-        const prediction: BatchPredictionResult = await this.predictorService.predictValues(data, model)
+        const prediction: BatchPredictionResult = await this.predictorService.predictValues(data.data, model)
 
         return this.service.addCsvDocumentPrediction(documentId, prediction)
     }

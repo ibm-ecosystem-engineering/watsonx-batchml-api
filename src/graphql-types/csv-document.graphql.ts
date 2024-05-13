@@ -7,7 +7,7 @@ import {
     CsvDocumentStatusFilter, CsvPredictionCorrectionModel,
     CsvPredictionModel,
     CsvPredictionRecordFilter,
-    CsvPredictionResultModel,
+    CsvPredictionResultModel, PaginationInputModel, PaginationMetadataModel, PaginationResultModel,
     PerformanceSummaryModel
 } from "../models";
 import {CsvPredictionRecordOptionsModel} from "../services";
@@ -149,4 +149,46 @@ export class CsvPredictionResult implements CsvPredictionResultModel {
 export class CsvPredictionRecordOptions implements CsvPredictionRecordOptionsModel {
     @Field(() => CsvPredictionRecordFilter)
     filter?: CsvPredictionRecordFilter
+}
+
+@InputType({description: 'Pagination input'})
+export class PaginationInput implements PaginationInputModel {
+    @Field(() => Number)
+    page: number;
+    @Field(() => Number)
+    pageSize: number;
+}
+
+@ObjectType({description: 'Pagination metadata'})
+export class PaginationMetadata implements PaginationMetadataModel {
+    @Field(() => Number)
+    page: number;
+    @Field(() => Number)
+    pageSize: number;
+    @Field(() => Number)
+    totalCount: number;
+}
+
+@ObjectType({description: 'Paginated CsvDocumentRecords'})
+export class PaginatedCsvDocumentRecords implements PaginationResultModel<CsvDocumentRecordModel> {
+    @Field(() => [CsvDocumentRecord])
+    data: CsvDocumentRecordModel[];
+    @Field(() => PaginationMetadata)
+    metadata: PaginationMetadataModel;
+}
+
+@ObjectType({description: 'Paginated CsvPredictionResults'})
+export class PaginatedCsvPredictionResults implements PaginationResultModel<CsvPredictionResultModel> {
+    @Field(() => [CsvPredictionResult])
+    data: Array<CsvPredictionResultModel>;
+    @Field(() => PaginationMetadata)
+    metadata: PaginationMetadataModel;
+}
+
+@ObjectType({description: 'Paginated CsvDocumentModel'})
+export class PaginatedCsvDocuments implements PaginationResultModel<CsvDocumentModel> {
+    @Field(() => PaginationMetadata)
+    metadata: PaginationMetadataModel;
+    @Field(() => [CsvDocument])
+    data: Array<CsvDocumentModel>;
 }
