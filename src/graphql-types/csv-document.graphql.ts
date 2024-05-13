@@ -143,6 +143,8 @@ export class CsvPredictionResult implements CsvPredictionResultModel {
     agree: boolean;
     @Field(() => Number)
     confidence: number;
+    @Field({nullable: true})
+    data?: string;
 }
 
 @InputType({description: 'CSV Prediction Result'})

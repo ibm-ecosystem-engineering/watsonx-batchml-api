@@ -104,13 +104,12 @@ export class CsvDocumentController {
     async getCsvDocument(@Res() response: Response, @Param('id') id: string, @Param('name') name: string) {
         console.log('Getting csv document: ' + id);
 
-        const {filename, buffer} = await this.service.getOriginalCsvDocument(id);
+        const {filename, stream} = await this.service.getOriginalCsvDocument(id);
 
         response.contentType('text/csv');
         response.attachment(filename)
-        response.send(buffer)
+        stream.pipe(response)
     }
-
 
     @Get(pathGetCsvPredictionDocument)
     @ApiOperation({
@@ -138,11 +137,11 @@ export class CsvDocumentController {
         console.log('Getting csv prediction document: ' + id + ', ' + predictionId);
 
         try {
-            const {filename, buffer} = await this.service.getPredictionDocument(id, predictionId, name);
+            const {filename, stream} = await this.service.getPredictionDocument(id, predictionId, name);
 
             response.contentType('text/csv');
             response.attachment(filename);
-            response.send(buffer);
+            stream.pipe(response);
         } catch (err) {
             throw isDocumentNotFound(err)
                 ? new HttpException(err.message, HttpStatus.NOT_FOUND)

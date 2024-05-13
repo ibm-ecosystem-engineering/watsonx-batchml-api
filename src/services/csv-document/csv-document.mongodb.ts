@@ -1,6 +1,8 @@
 import {extname, parse as parsePath} from 'path';
 import {Observable} from "rxjs";
 import {Collection, Db, Document, GridFSBucket, ObjectId, OptionalId, WithId} from "mongodb";
+import {Stream} from "stream";
+import {format} from '@fast-csv/format';
 
 import {CsvDocumentApi, CsvDocumentPredictionResult, CsvPredictionRecordOptionsModel} from "./csv-document.api";
 import {
@@ -25,11 +27,13 @@ import {
     CsvPredictionModel,
     CsvPredictionRecordFilter,
     CsvPredictionResultModel,
-    CsvUpdatedDocumentInputModel, PaginationInputModel, PaginationResultModel,
+    CsvUpdatedDocumentInputModel,
+    PaginationInputModel,
+    PaginationResultModel,
     PerformanceSummaryModel,
     PredictionPerformanceSummaryModel
 } from "../../models";
-import {first, streamToBuffer} from "../../util";
+import {first} from "../../util";
 import {BatchPredictionValue} from "../batch-predictor";
 import {buildOriginalUrl, buildPredictionUrl} from "./csv-document.config";
 
@@ -275,14 +279,13 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
         );
     }
 
-    async getOriginalCsvDocument(id: string): Promise<{filename: string, buffer: Buffer}> {
+    async getOriginalCsvDocument(id: string): Promise<{filename: string, stream: Stream}> {
         const document = await this.documents.findOne(new ObjectId(id))
 
-        const fileId = `${document._id}-original.csv`
+        const extension = extname(document.name)
+        const fileId = `${document._id}-original${extension}`
 
-        const buffer = await streamToBuffer(this.bucket.openDownloadStreamByName(fileId))
-
-        return {filename: document.name, buffer}
+        return {stream: this.bucket.openDownloadStreamByName(fileId), filename: document.name}
     }
 
     async getPredictionPerformanceSummary(predictionId: string): Promise<PredictionPerformanceSummaryModel> {
@@ -423,7 +426,7 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
             query['agree'] = false
         }
 
-        console.log('Querying prediction records: ', {filter, query})
+        console.log('Querying prediction records: ', {filter, query, page, pageSize})
 
         const dataFilter = pageSize === -1
             ? [{$skip: (page - 1) * pageSize}]
@@ -433,6 +436,23 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
             .aggregate([
                 {
                     $match: query
+                },
+                {
+                    $addFields: {
+                        recordId: { $toObjectId: '$csvRecordId' },
+                        id: { $toString: '$_id' },
+                    }
+                },
+                {
+                    $lookup: {
+                        from: 'documentRecords',
+                        localField: 'recordId',
+                        foreignField: '_id',
+                        as: 'csvRecord'
+                    }
+                },
+                {
+                    $replaceRoot: { newRoot: { $mergeObjects: [ { $arrayElemAt: [ "$csvRecord", 0 ] }, "$$ROOT" ] } }
                 },
                 {
                     $facet: {
@@ -445,7 +465,7 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
 
         return {
             metadata: {totalCount: results[0].metadata[0].totalCount, page, pageSize},
-            data: results[0].data.map(val => Object.assign({}, val, {id: val._id})),
+            data: results[0].data,
         }
     }
 
@@ -472,40 +492,47 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
         return Object.assign({}, result, {id: result._id})
     }
 
-    async getPredictionDocument(id: string, predictionId: string): Promise<{buffer: Buffer, filename: string}> {
+    async getPredictionDocument(id: string, predictionId: string): Promise<{stream: Stream, filename: string}> {
         const document = await this.getCsvDocument(id)
         const prediction = await this.getCsvPrediction(predictionId)
-        // TODO optimize query
-        const documentRecords = await this.listCsvDocumentRecords(id, {page: 1, pageSize: -1})
-        const predictionRecords = await this.listPredictionRecords(predictionId, {page: 1, pageSize: -1})
-
-        const values = predictionRecords.data.map(val => {
-            const docRecord: CsvDocumentRecordModel | undefined = first(documentRecords.data.filter(doc => doc.id === val.csvRecordId))
-
-            if (!docRecord) {
-                console.log('Unable to find matching document record: ' + val.csvRecordId)
-                return undefined
-            }
-
-            return Object.assign({}, JSON.parse(docRecord.data), {predictionValue: val.predictionValue, confidence: val.confidence, id: val.id, predictionId: val.predictionId, agree: val.agree})
-        })
 
         const name = parsePath(document.name).name
         const filename = `${name}-${prediction.model}.csv`
 
-        if (values.length === 0) {
-            return {filename, buffer: Buffer.from('')}
-        }
+        console.log('Creating stream')
+        const stream = format({ headers: true })
 
-        const keys: string[] = Object.keys(values[0])
+        console.log('Getting prediction records')
+        this.predictionRecords
+            .aggregate([
+                {
+                    $match: {predictionId}
+                },
+                {
+                    $addFields: {
+                        recordId: { $toObjectId: '$csvRecordId' },
+                        id: { $toString: '$_id' },
+                    }
+                },
+                {
+                    $lookup: {
+                        from: 'documentRecords',
+                        localField: 'recordId',
+                        foreignField: '_id',
+                        as: 'csvRecord'
+                    }
+                },
+                {
+                    $replaceRoot: { newRoot: { $mergeObjects: [ { $arrayElemAt: [ "$csvRecord", 0 ] }, "$$ROOT" ] } }
+                },
+                {
+                    $unset: ['data', 'csvRecord', '_id', 'csvRecordId', 'recordId', 'predictionId', 'documentId']
+                },
+            ])
+            .stream()
+            .pipe(stream)
 
-        const buffer = values.reduce((result: Buffer, current: any) => {
-            const row: Buffer = Buffer.from(keys.map(key => '"' + current[key] + '"').join(',') + '\n');
-
-            return Buffer.concat([result, row])
-        }, Buffer.from(keys.map(val => '"' + val + '"').join(',') + '\n'))
-
-        return {buffer, filename}
+        return {stream, filename}
     }
 
     private async findPredictions(documentId: string): Promise<CsvPredictionModel[]> {
