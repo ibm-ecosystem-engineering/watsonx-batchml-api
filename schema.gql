@@ -88,11 +88,6 @@ type CsvPredictionResult {
   providedValue: String!
 }
 
-"""greeting"""
-type Greeting {
-  greeting: String!
-}
-
 type Mutation {
   createCsvPrediction(id: ID!, model: String): CsvPrediction!
   deleteCsvDocument(id: ID!): Record!
@@ -143,7 +138,6 @@ type PerformanceSummary {
 type Query {
   getCsvDocument(id: ID!): CsvDocument!
   getCsvPrediction(id: ID!): [CsvPrediction!]!
-  helloWorld: Greeting!
   listCsvDocumentRecords(id: ID!, pagination: PaginationInput): PaginatedCsvDocumentRecords!
   listCsvDocuments(pagination: PaginationInput, status: CsvDocumentStatusFilter): PaginatedCsvDocuments!
   listCsvPredictionRecords(id: ID!, options: CsvPredictionRecordOptions, pagination: PaginationInput): PaginatedCsvPredictionResults!

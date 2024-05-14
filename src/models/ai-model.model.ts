@@ -39,6 +39,6 @@ export const getAIModelInputValue = <T> (val: T) => {
 
         const keys: string[] = isAIModelInputModel(field) ? [field.name].concat(field.aliases || []) : [field]
 
-        return first(keys.map(k => val[k]).filter(v => !!v)) || '(blank)'
+        return first(keys.map(k => val[k]).filter(v => !!v)).orElse('(blank)')
     }
 }

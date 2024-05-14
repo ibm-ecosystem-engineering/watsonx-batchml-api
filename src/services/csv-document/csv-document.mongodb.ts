@@ -139,12 +139,12 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
         const changedRows: CsvPredictionCorrectionModel[] = rows.filter((row: CsvPredictionCorrectionModel) => {
             const originalRecord = first(originalPredictionRecords.data.filter(record => record.id === row.predictionRecordId))
 
-            if (!originalRecord) {
+            if (originalRecord.notPresent()) {
                 console.log('  Unable to find original prediction record: ' + row.predictionRecordId)
                 return false
             }
 
-            return !defaultCompareFn(originalRecord.predictionValue, row.predictionValue)
+            return !defaultCompareFn(originalRecord.map(val => val.predictionValue).get(), row.predictionValue)
         })
 
         if (changedRows.length === 0) {
@@ -348,12 +348,14 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
             })
             .concat(correctedRecords)
             .reduce((result: PerformanceSummary[], current: StatAggregation) => {
-                let currentSummary: PerformanceSummary = first(result.filter(val => val.predictionId === current.predictionId))
-                if (!currentSummary) {
-                    currentSummary = new PerformanceSummary({predictionId: current.predictionId, confidenceThreshold})
+                const currentSummary: PerformanceSummary = first(result.filter(val => val.predictionId === current.predictionId))
+                    .orElseGet(() => {
+                        const value = new PerformanceSummary({predictionId: current.predictionId, confidenceThreshold})
 
-                    result.push(currentSummary)
-                }
+                        result.push(value)
+
+                        return value
+                    })
 
                 currentSummary.addStat(current)
 
@@ -484,13 +486,11 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
 
                 return results.map(val => {
                     val.performanceSummary = first(summaries.filter(s => val.id === s.predictionId))
+                        .orElse(undefined)
 
                     return val
                 })
             })
-            // .then(results => this.populatePredictionRecords(documentId, results))
-            // .then(results => this.populateCorrectionRecords(results))
-            // .then(results => this.populatePerformanceSummary(results))
     }
 
     async getCsvPrediction(predictionId: string): Promise<CsvPredictionModel> {
