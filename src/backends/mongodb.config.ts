@@ -53,9 +53,7 @@ export const mongodbClient = async (): Promise<Db> => {
             const filepath = dirname(filename)
             await promises.mkdir(filepath, {recursive: true})
 
-            const file = await promises.open(filename, 'r+')
-            await promises.writeFile(file, cert)
-            await file.close()
+            await promises.writeFile(filename, cert)
         }
 
         const client = new MongoClient(
