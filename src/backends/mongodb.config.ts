@@ -34,31 +34,37 @@ export const mongodbConfig = (): MongodbConfig | undefined => {
     return _config = config
 }
 
-let _client: Db;
-export const mongodbClient = async () => {
+let _client: Promise<Db>;
+export const mongodbClient = async (): Promise<Db> => {
     if (_client) {
         return _client
     }
 
     const config: MongodbConfig = mongodbConfig()
 
-    let filename = config.certificateFile || '/tmp/cert/ca.crt'
-    if (config.certificateBase64) {
-        const cert = Buffer.from(config.certificateBase64, 'base64')
+    return _client = new Promise<Db>(async (resolve, reject) => {
 
-        const file = await promises.open(filename, 'r+')
-        await promises.writeFile(file, cert)
-    }
+        let filename = config.certificateFile || '/tmp/cert/ca.crt'
+        if (config.certificateBase64) {
+            console.log(    '** Processing certificate contents')
+            const cert = Buffer.from(config.certificateBase64, 'base64')
 
-    return _client = new MongoClient(
-        config.connectString,
-        {
-            auth: {
-                username: config.username,
-                password: config.password,
-            },
-            tlsCAFile: filename,
+            const file = await promises.open(filename, 'r+')
+            await promises.writeFile(file, cert)
+            await file.close()
         }
-    )
-        .db(config.databaseName)
+
+        const client = new MongoClient(
+            config.connectString,
+            {
+                auth: {
+                    username: config.username,
+                    password: config.password,
+                },
+                tlsCAFile: filename,
+            }
+        )
+
+        resolve(client.db(config.databaseName))
+    })
 }
