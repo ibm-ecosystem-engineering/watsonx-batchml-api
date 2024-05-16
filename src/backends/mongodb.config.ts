@@ -1,11 +1,13 @@
 import {Db, MongoClient} from "mongodb";
+import {promises} from 'fs';
 
 export interface MongodbConfig {
     username: string;
     password: string;
     connectString: string;
     databaseName: string;
-    certificateFile: string;
+    certificateFile?: string;
+    certificateBase64?: string;
 }
 
 let _config: MongodbConfig;
@@ -21,6 +23,7 @@ export const mongodbConfig = (): MongodbConfig | undefined => {
         connectString: process.env.MONGODB_CONNECT_STRING,
         databaseName: process.env.MONGODB_DATABASE_NAME,
         certificateFile: process.env.MONGODB_CERTIFICATE_FILE,
+        certificateBase64: process.env.MONGODB_CERTIFICATE_BASE64,
     }
 
     if (!config.username || !config.password || !config.connectString) {
@@ -32,12 +35,20 @@ export const mongodbConfig = (): MongodbConfig | undefined => {
 }
 
 let _client: Db;
-export const mongodbClient = () => {
+export const mongodbClient = async () => {
     if (_client) {
         return _client
     }
 
     const config: MongodbConfig = mongodbConfig()
+
+    let filename = config.certificateFile || '/tmp/cert/ca.crt'
+    if (config.certificateBase64) {
+        const cert = Buffer.from(config.certificateBase64, 'base64')
+
+        const file = await promises.open(filename, 'r+')
+        await promises.writeFile(file, cert)
+    }
 
     return _client = new MongoClient(
         config.connectString,
@@ -46,7 +57,7 @@ export const mongodbClient = () => {
                 username: config.username,
                 password: config.password,
             },
-            tlsCAFile: config.certificateFile,
+            tlsCAFile: filename,
         }
     )
         .db(config.databaseName)

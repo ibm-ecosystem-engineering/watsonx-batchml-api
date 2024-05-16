@@ -3,6 +3,8 @@ import {MachineLearningResultModel} from "./machine-learning-result.model";
 export interface CsvDocumentInputModel {
     name: string;
     description?: string;
+    worksheetName?: string;
+    worksheetStartRow?: string;
 }
 
 export interface CsvUpdatedDocumentInputModel {
