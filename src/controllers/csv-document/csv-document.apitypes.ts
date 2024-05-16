@@ -13,6 +13,10 @@ export class CsvDocumentInput implements CsvDocumentInputModel {
     name: string;
     @ApiProperty({nullable: true})
     description?: string;
+    @ApiProperty({nullable: true})
+    worksheetName?: string;
+    @ApiProperty({nullable: true})
+    worksheetStartRow?: string;
 }
 
 export class CsvUpdatedDocumentInput implements CsvUpdatedDocumentInputModel {

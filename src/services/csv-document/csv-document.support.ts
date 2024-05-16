@@ -5,7 +5,7 @@ import {Observable, Subject} from "rxjs";
 import {read as readXls, utils as xlsUtils} from "xlsx";
 
 import {
-    CsvDocumentEventAction,
+    CsvDocumentEventAction, CsvDocumentModel,
     CsvDocumentRecordModel,
     CsvPredictionCorrectionModel,
     CsvPredictionResultModel,
@@ -14,20 +14,14 @@ import {
 } from "../../models";
 
 export type FileInfo = {filename: string, buffer: Buffer}
-type FileHandler = (file: FileInfo) => Promise<CsvDocumentRecordModel[]>
+export type FileMetadata = {sheetName: string, start: number}
+type FileHandler = (file: FileInfo, metadata?: FileMetadata) => Promise<CsvDocumentRecordModel[]>
 
-const ciasRE = /.*cias.*/i
-const ierpRE = /.*ierp.*/i
-
-const excelFileHandler = async ({filename, buffer}: FileInfo): Promise<CsvDocumentRecordModel[]> => {
+const excelFileHandler = async ({filename, buffer}: FileInfo, inputMetadata?: FileMetadata): Promise<CsvDocumentRecordModel[]> => {
 
     const workbook = readXls(buffer)
 
-    const {sheetName, start} = ciasRE.test(filename)
-        ? {sheetName: 'Treasury & Tax', start: 3}
-        : (ierpRE.test(filename)
-            ? {sheetName: 'Payment Proposal Details', start: 2}
-            : {sheetName: '', start: 0})
+    const {sheetName, start}: FileMetadata = inputMetadata || {sheetName: '', start: 0}
 
     if (!sheetName) {
         console.log('Unable to identify worksheet for file: ' + filename)
@@ -50,9 +44,10 @@ const fileHandlers: {[key: string]: FileHandler} = {
     '.csv': async (file: FileInfo): Promise<CsvDocumentRecordModel[]> => parseCsv(file.buffer),
     '.xlsx': excelFileHandler,
     '.xlsb': excelFileHandler,
+    '.xlsm': excelFileHandler,
 }
 
-export const parseDocumentRows = async (documentId: string, file: FileInfo): Promise<CsvDocumentRecordModel[]> => {
+export const parseDocumentRows = async (document: CsvDocumentModel, file: FileInfo): Promise<CsvDocumentRecordModel[]> => {
 
     const extension = extname(file.filename)
 
@@ -63,11 +58,13 @@ export const parseDocumentRows = async (documentId: string, file: FileInfo): Pro
         throw new Error('Unknown file extension: ' + extension)
     }
 
+    const metadata: FileMetadata = {sheetName: document.worksheetName || '', start: parseInt(document.worksheetStartRow) || 0}
+
     // parse csv file
-    const documentRows: CsvDocumentRecordModel[] = await fileHandler(file)
+    const documentRows: CsvDocumentRecordModel[] = await fileHandler(file, metadata)
 
     return documentRows.map(row => {
-        row.documentId = documentId;
+        row.documentId = document.id;
         row.data = JSON.stringify(row);
 
         return row;

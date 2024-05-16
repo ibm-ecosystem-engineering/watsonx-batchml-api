@@ -65,7 +65,7 @@ export class AiModelMock implements AiModelApi {
     }
 
     async getAIModel(id: string): Promise<AIModelModel> {
-        return first(_models.filter(val => val.id === id || val.name === id));
+        return first(_models.filter(val => val.id === id || val.name === id)).orElse(undefined);
     }
 
     async listAIModels(): Promise<AIModelModel[]> {

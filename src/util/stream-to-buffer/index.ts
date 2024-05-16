@@ -1,9 +1,10 @@
+import {Stream} from "stream";
 
 const isBuffer = (val: unknown): val is Buffer => {
     return !!val && !!((val as Buffer).buffer)
 }
 
-export const streamToBuffer = async (stream: NodeJS.ReadableStream | Buffer): Promise<Buffer> => {
+export const streamToBuffer = async (stream: NodeJS.ReadableStream | Buffer | Stream): Promise<Buffer> => {
     if (isBuffer(stream)) {
         return stream
     }

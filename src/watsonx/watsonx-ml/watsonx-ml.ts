@@ -154,12 +154,12 @@ const getDeploymentFieldValue = <T> (val: T) => {
 
         const keys: string[] = isDeploymentField(field) ? [field.name].concat(field.aliases || []) : [field]
 
-        return first(keys.map(k => val[k]).filter(v => !!v)) || '(blank)'
+        return first(keys.map(k => val[k]).filter(v => !!v)).orElse('(blank)')
     }
 }
 
 const calculateConfidence = (probability: number[]): number => {
-    return first(probability.sort((a, b) => b - a))
+    return first(probability.sort((a, b) => b - a)).orElse(0)
 }
 
 const predictionResultToPredictionValues = <T> (input: PredictionInput<T>, label: string) => {
