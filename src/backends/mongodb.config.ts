@@ -1,5 +1,6 @@
 import {Db, MongoClient} from "mongodb";
 import {promises} from 'fs';
+import {dirname} from 'path';
 
 export interface MongodbConfig {
     username: string;
@@ -48,6 +49,9 @@ export const mongodbClient = async (): Promise<Db> => {
         if (config.certificateBase64) {
             console.log(    '** Processing certificate contents')
             const cert = Buffer.from(config.certificateBase64, 'base64')
+
+            const filepath = dirname(filename)
+            await promises.mkdir(filepath, {recursive: true})
 
             const file = await promises.open(filename, 'r+')
             await promises.writeFile(file, cert)
