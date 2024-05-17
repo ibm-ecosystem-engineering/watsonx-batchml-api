@@ -580,15 +580,27 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
 
         const filename = `${name}-${prediction.model}.${extension}`
 
+        console.log('Creating stream')
+        const stream = new PassThrough()
+
+        this.streamPredictionDocument(document, prediction, modelConfig, extension, stream)
+            .then(result => console.log('Prediction document streaming completed: ', {filename, result}))
+            .catch(err => {
+                console.log('Error streaming prediction document: ', err)
+                stream.end()
+            })
+
+        return {stream, filename}
+    }
+
+    private async streamPredictionDocument(document: CsvDocumentModel, prediction: CsvPredictionModel, modelConfig: AIModelModel, extension: string, stream: PassThrough): Promise<boolean> {
+
         // get original document stream
         console.log('Getting original document stream')
         const {stream : inStream} = await this.getOriginalCsvDocument(document.id)
 
         console.log('Reading original xls')
-        const workbook: WorkBook = readXls(await streamToBuffer(inStream))
-
-        console.log('Creating stream')
-        const stream = new PassThrough()
+        const workbook: WorkBook = readXls(await streamToBuffer(inStream), {type: 'buffer'})
 
         console.log('Getting prediction records')
         const results: Document[] = await this.predictionRecords
@@ -619,23 +631,85 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
             ])
             .toArray()
 
+        console.log('Getting worksheet: ' + document.worksheetName)
         const sheet: WorkSheet = workbook.Sheets[document.worksheetName]
-        const startRow = parseInt(document.worksheetStartRow)
-        const columnIndex: number = first(sheet["!data"][startRow]
-            .map((val: any, index: number) => (val === modelConfig.label) ? index : -1)
-            .filter((val: number) => val > -1))
-            .orElseThrow(() => new Error('Unable to find column: ' + modelConfig.label))
+        console.log('Getting start row: ' + document.worksheetStartRow)
+        const startRow = parseInt(document.worksheetStartRow || '0')
+
+        type CellMetadata = {column: string, row: number, key: string}
+
+        console.log('Processing cells')
+
+        const rowCellRegEx = /([A-Za-z]+)([0-9]+)/
+        const cells: CellMetadata[] = Object.keys(sheet)
+            .map(key => {
+                if (key.startsWith('!')) {
+                    return undefined
+                }
+
+                const match = rowCellRegEx.exec(key)
+
+                if (match.length < 3) {
+                    console.log('Match not found: ' + key)
+                    return undefined
+                }
+
+                if (!match[2] || isNaN(parseInt(match[2]))) {
+                    console.log('Row value could not be parsed as an int: ' + match[2])
+                    return undefined
+                }
+
+                return {
+                    column: match[1],
+                    row: parseInt(match[2]) - 1,
+                    key,
+                }
+            })
+            .filter(val => !!val)
+
+        console.log('Finding column name: ', {cells: cells})
+
+        type CellValue = {t: string, v: string, w: string, f: string}
+        const labelCell: CellMetadata = first(cells
+            .filter(cell => {
+                const value: CellValue = sheet[cell.key]
+
+                const match = value.v === modelConfig.label
+                if (match) {
+                    console.log('Found matching cell: ', {cell, value, match})
+                }
+
+                return match
+            }))
+            .orElse(undefined)
+
+        if (!labelCell) {
+            console.log('Unable to find column for label: ' + modelConfig.label)
+            throw new Error('Unable to find column for label: ' + modelConfig.label)
+        }
 
         console.log('Set prediction values on worksheet')
-        let currentRow = startRow + 1;
+        let currentRow = labelCell.row + 1;
         results.forEach((result: Document) => {
-            sheet["!data"][currentRow++][columnIndex] = result.predictionValue
+            const rowIndex = currentRow++
+
+            const rowLabel = '' + (rowIndex + 1)
+            const key = labelCell.column + rowLabel
+
+            if (!key) {
+                console.log('Unable to find matching cell: ' + labelCell.column + (rowIndex + 1))
+                return
+            }
+
+            const cell: CellValue = sheet[key]
+
+            cell.v = result.predictionValue
         })
 
         console.log('Writing buffer to stream')
         bufferToStream(writeXls(workbook, {type: 'buffer', bookType: extension as any})).pipe(stream)
 
-        return {stream, filename}
+        return true
     }
 
     private async findPredictions(documentId: string): Promise<CsvPredictionModel[]> {
