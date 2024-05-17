@@ -25,7 +25,16 @@ export const watsonxConfig = (): WatsonxConfig | undefined => {
         defaultLabel: process.env.WML_DEFAULT_LABEL || 'WHT_PER',
     }
 
-    if (!config.apiKey || !config.endpoint || !config.defaultDeploymentId || !config.identityUrl) {
+    const isEmpty = <T> (val: T, key: keyof T): boolean => {
+        if (!val[key]) {
+            console.log(`${String(key)} is empty`)
+            return true
+        }
+
+        return false
+    }
+
+    if (isEmpty(config, 'apiKey') || isEmpty(config, 'endpoint') || isEmpty(config, 'defaultDeploymentId') || isEmpty(config, 'identityUrl')) {
         return
     }
 

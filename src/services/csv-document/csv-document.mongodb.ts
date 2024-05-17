@@ -1,9 +1,9 @@
 import {extname, parse as parsePath} from 'path';
 import {Observable} from "rxjs";
 import {Collection, Db, Document, GridFSBucket, ObjectId, OptionalId, WithId} from "mongodb";
-import {PassThrough, Stream, Writable} from "stream";
+import {PassThrough, Stream} from "stream";
 import {format} from '@fast-csv/format';
-import {read as readXls, utils as xlsUtils, write as writeXls, WorkBook, WorkSheet} from "xlsx";
+import {read as readXls, WorkBook, WorkSheet, write as writeXls} from "xlsx";
 
 import {CsvDocumentApi, CsvDocumentPredictionResult, CsvPredictionRecordOptionsModel} from "./csv-document.api";
 import {
@@ -38,7 +38,8 @@ import {
     PerformanceSummaryModel,
     PredictionPerformanceSummaryModel
 } from "../../models";
-import {first, streamToBuffer} from "../../util";
+import {first, Optional, streamToBuffer} from "../../util";
+import {notEmpty} from "../../util/array-util";
 
 interface InternalCsvDocumentModel extends CsvDocumentInputModel {
     id: string;
@@ -386,13 +387,27 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
             },
         })
 
-        const results: Document[] = await this.documents
-            .aggregate(pipeline)
-            .toArray()
+        type MetadataType = {totalCount: number}
+
+        const result: Optional<Document> = Optional
+            .ofNullable(await this.documents.aggregate(pipeline).toArray())
+            .filter(notEmpty)
+            .flatMap(first)
+
+        const totalCount: number = result
+            .walk<MetadataType[]>('metadata')
+            .filter(notEmpty)
+            .flatMap<MetadataType>(first)
+            .walk<number>('totalCount')
+            .orElse(0)
+
+        const data: WithId<CsvDocumentModel>[] = result
+            .walk<WithId<CsvDocumentModel>[]>('data')
+            .orElse([])
 
         return {
-            metadata: {totalCount: results[0].metadata[0].totalCount, page, pageSize},
-            data: results[0].data.map(val => Object.assign({}, val, {id: val._id})),
+            metadata: {totalCount, page, pageSize},
+            data: data.map(val => Object.assign({}, val, {id: val._id})),
         }
 
     }
