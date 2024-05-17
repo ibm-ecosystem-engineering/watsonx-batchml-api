@@ -119,8 +119,8 @@ export class CsvPrediction implements CsvPredictionModel {
     predictionUrl: string;
     @Field(() => [CsvPredictionResult])
     predictions: CsvPredictionResultModel[];
-    @Field(() => PerformanceSummary)
-    performanceSummary: PerformanceSummaryModel;
+    @Field(() => PerformanceSummary, {nullable: true})
+    performanceSummary?: PerformanceSummaryModel;
     @Field(() => [CsvPredictionCorrection], {nullable: true})
     corrections?: CsvPredictionCorrectionModel[];
 }

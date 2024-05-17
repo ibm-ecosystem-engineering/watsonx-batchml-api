@@ -3,6 +3,8 @@ import {MachineLearningResultModel} from "./machine-learning-result.model";
 export interface CsvDocumentInputModel {
     name: string;
     description?: string;
+    worksheetName?: string;
+    worksheetStartRow?: string;
 }
 
 export interface CsvUpdatedDocumentInputModel {
@@ -76,7 +78,7 @@ export interface CsvPredictionModel {
     predictionUrl: string;
     predictions: CsvPredictionResultModel[];
     corrections?: CsvPredictionCorrectionModel[];
-    performanceSummary: PerformanceSummaryModel;
+    performanceSummary?: PerformanceSummaryModel;
 }
 
 export interface CsvPredictionResultModel {

@@ -1,11 +1,14 @@
 import {Db, MongoClient} from "mongodb";
+import {promises} from 'fs';
+import {dirname} from 'path';
 
 export interface MongodbConfig {
     username: string;
     password: string;
     connectString: string;
     databaseName: string;
-    certificateFile: string;
+    certificateFile?: string;
+    certificateBase64?: string;
 }
 
 let _config: MongodbConfig;
@@ -21,6 +24,7 @@ export const mongodbConfig = (): MongodbConfig | undefined => {
         connectString: process.env.MONGODB_CONNECT_STRING,
         databaseName: process.env.MONGODB_DATABASE_NAME,
         certificateFile: process.env.MONGODB_CERTIFICATE_FILE,
+        certificateBase64: process.env.MONGODB_CERTIFICATE_BASE64,
     }
 
     if (!config.username || !config.password || !config.connectString) {
@@ -31,23 +35,38 @@ export const mongodbConfig = (): MongodbConfig | undefined => {
     return _config = config
 }
 
-let _client: Db;
-export const mongodbClient = () => {
+let _client: Promise<Db>;
+export const mongodbClient = async (): Promise<Db> => {
     if (_client) {
         return _client
     }
 
     const config: MongodbConfig = mongodbConfig()
 
-    return _client = new MongoClient(
-        config.connectString,
-        {
-            auth: {
-                username: config.username,
-                password: config.password,
-            },
-            tlsCAFile: config.certificateFile,
+    return _client = new Promise<Db>(async (resolve, reject) => {
+
+        let filename = config.certificateFile || '/tmp/cert/ca.crt'
+        if (config.certificateBase64) {
+            console.log(    '** Processing certificate contents')
+            const cert = Buffer.from(config.certificateBase64, 'base64')
+
+            const filepath = dirname(filename)
+            await promises.mkdir(filepath, {recursive: true})
+
+            await promises.writeFile(filename, cert)
         }
-    )
-        .db(config.databaseName)
+
+        const client = new MongoClient(
+            config.connectString,
+            {
+                auth: {
+                    username: config.username,
+                    password: config.password,
+                },
+                tlsCAFile: filename,
+            }
+        )
+
+        resolve(client.db(config.databaseName))
+    })
 }

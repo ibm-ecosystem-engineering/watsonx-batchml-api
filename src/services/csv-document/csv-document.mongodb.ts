@@ -1,8 +1,9 @@
 import {extname, parse as parsePath} from 'path';
 import {Observable} from "rxjs";
 import {Collection, Db, Document, GridFSBucket, ObjectId, OptionalId, WithId} from "mongodb";
-import {Stream} from "stream";
+import {PassThrough, Stream} from "stream";
 import {format} from '@fast-csv/format';
+import {read as readXls, WorkBook, WorkSheet, write as writeXls} from "xlsx";
 
 import {CsvDocumentApi, CsvDocumentPredictionResult, CsvPredictionRecordOptionsModel} from "./csv-document.api";
 import {
@@ -16,7 +17,11 @@ import {
     PerformanceSummary,
     StatAggregation,
 } from "./csv-document.support";
+import {buildOriginalUrl, buildPredictionUrl} from "./csv-document.config";
+import {AiModelApi} from "../ai-model";
+import {BatchPredictionValue} from "../batch-predictor";
 import {
+    AIModelModel,
     CsvDocumentEventAction,
     CsvDocumentEventModel,
     CsvDocumentInputModel,
@@ -33,9 +38,8 @@ import {
     PerformanceSummaryModel,
     PredictionPerformanceSummaryModel
 } from "../../models";
-import {first} from "../../util";
-import {BatchPredictionValue} from "../batch-predictor";
-import {buildOriginalUrl, buildPredictionUrl} from "./csv-document.config";
+import {first, Optional, streamToBuffer} from "../../util";
+import {notEmpty} from "../../util/array-util";
 
 interface InternalCsvDocumentModel extends CsvDocumentInputModel {
     id: string;
@@ -70,7 +74,7 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
     private readonly predictionCorrectionRecords: Collection<CsvPredictionCorrectionModel>;
     private readonly bucket: GridFSBucket;
 
-    constructor(db: Db) {
+    constructor(db: Db, private readonly aiModelApi: AiModelApi) {
         this.documents = db.collection<CsvDocumentModel>('documents')
         this.documentRecords = db.collection<CsvDocumentRecordModel>('documentRecords')
 
@@ -120,7 +124,7 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
 
         // insert records
         console.log('Parsing rows from doc')
-        const rows: CsvDocumentRecordModel[] = await parseDocumentRows(document.id, {filename: document.name, buffer: file.buffer})
+        const rows: CsvDocumentRecordModel[] = await parseDocumentRows(document, {filename: document.name, buffer: file.buffer})
 
         console.log('Inserting csv rows: ' + rows.length)
         await this.documentRecords.insertMany(rows)
@@ -139,12 +143,12 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
         const changedRows: CsvPredictionCorrectionModel[] = rows.filter((row: CsvPredictionCorrectionModel) => {
             const originalRecord = first(originalPredictionRecords.data.filter(record => record.id === row.predictionRecordId))
 
-            if (!originalRecord) {
+            if (originalRecord.notPresent()) {
                 console.log('  Unable to find original prediction record: ' + row.predictionRecordId)
                 return false
             }
 
-            return !defaultCompareFn(originalRecord.predictionValue, row.predictionValue)
+            return !defaultCompareFn(originalRecord.map(val => val.predictionValue).get(), row.predictionValue)
         })
 
         if (changedRows.length === 0) {
@@ -336,6 +340,7 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
                 }
             ])
             .toArray())
+            .orElseThrow(() => new Error('Performance summary results missing'))
 
         const correctedRecords: StatAggregation[] = await this.predictionCorrectionRecords
             .aggregate(summaryPipeline(predictionIds))
@@ -348,12 +353,14 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
             })
             .concat(correctedRecords)
             .reduce((result: PerformanceSummary[], current: StatAggregation) => {
-                let currentSummary: PerformanceSummary = first(result.filter(val => val.predictionId === current.predictionId))
-                if (!currentSummary) {
-                    currentSummary = new PerformanceSummary({predictionId: current.predictionId, confidenceThreshold})
+                const currentSummary: PerformanceSummary = first(result.filter(val => val.predictionId === current.predictionId))
+                    .orElseGet(() => {
+                        const value = new PerformanceSummary({predictionId: current.predictionId, confidenceThreshold})
 
-                    result.push(currentSummary)
-                }
+                        result.push(value)
+
+                        return value
+                    })
 
                 currentSummary.addStat(current)
 
@@ -380,13 +387,27 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
             },
         })
 
-        const results: Document[] = await this.documents
-            .aggregate(pipeline)
-            .toArray()
+        type MetadataType = {totalCount: number}
+
+        const result: Optional<Document> = Optional
+            .ofNullable(await this.documents.aggregate(pipeline).toArray())
+            .filter(notEmpty)
+            .flatMap(first)
+
+        const totalCount: number = result
+            .walk<MetadataType[]>('metadata')
+            .filter(notEmpty)
+            .flatMap<MetadataType>(first)
+            .walk<number>('totalCount')
+            .orElse(0)
+
+        const data: WithId<CsvDocumentModel>[] = result
+            .walk<WithId<CsvDocumentModel>[]>('data')
+            .orElse([])
 
         return {
-            metadata: {totalCount: results[0].metadata[0].totalCount, page, pageSize},
-            data: results[0].data.map(val => Object.assign({}, val, {id: val._id})),
+            metadata: {totalCount, page, pageSize},
+            data: data.map(val => Object.assign({}, val, {id: val._id})),
         }
 
     }
@@ -484,13 +505,11 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
 
                 return results.map(val => {
                     val.performanceSummary = first(summaries.filter(s => val.id === s.predictionId))
+                        .orElse(undefined)
 
                     return val
                 })
             })
-            // .then(results => this.populatePredictionRecords(documentId, results))
-            // .then(results => this.populateCorrectionRecords(results))
-            // .then(results => this.populatePerformanceSummary(results))
     }
 
     async getCsvPrediction(predictionId: string): Promise<CsvPredictionModel> {
@@ -500,10 +519,21 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
     }
 
     async getPredictionDocument(id: string, predictionId: string): Promise<{stream: Stream, filename: string}> {
-        const document = await this.getCsvDocument(id)
-        const prediction = await this.getCsvPrediction(predictionId)
+        const document: CsvDocumentModel = await this.getCsvDocument(id)
+        const prediction: CsvPredictionModel = await this.getCsvPrediction(predictionId)
 
+        const extension = extname(document.name)
+
+        if (extension === '.csv') {
+            return this.getPredictionCsvDocument(document, prediction)
+        } else {
+            return this.getPredictionExcelDocument(document, prediction)
+        }
+    }
+
+    private async getPredictionCsvDocument(document: CsvDocumentModel, prediction: CsvPredictionModel): Promise<{stream: Stream, filename: string}> {
         const name = parsePath(document.name).name
+
         const filename = `${name}-${prediction.model}.csv`
 
         console.log('Creating stream')
@@ -513,7 +543,7 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
         this.predictionRecords
             .aggregate([
                 {
-                    $match: {predictionId}
+                    $match: {predictionId: prediction.id}
                 },
                 {
                     $addFields: {
@@ -538,6 +568,72 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
             ])
             .stream()
             .pipe(stream)
+
+        return {stream, filename}
+    }
+
+    private async getPredictionExcelDocument(document: CsvDocumentModel, prediction: CsvPredictionModel): Promise<{stream: Stream, filename: string}> {
+        const modelConfig: AIModelModel = await this.aiModelApi.getAIModel(prediction.model)
+
+        const name = parsePath(document.name).name
+        const extension = extname(document.name).replace(/^[.]/, '')
+
+        const filename = `${name}-${prediction.model}.${extension}`
+
+        // get original document stream
+        console.log('Getting original document stream')
+        const {stream : inStream} = await this.getOriginalCsvDocument(document.id)
+
+        console.log('Reading original xls')
+        const workbook: WorkBook = readXls(await streamToBuffer(inStream))
+
+        console.log('Creating stream')
+        const stream = new PassThrough()
+
+        console.log('Getting prediction records')
+        const results: Document[] = await this.predictionRecords
+            .aggregate([
+                {
+                    $match: { predictionId: prediction.id }
+                },
+                {
+                    $addFields: {
+                        recordId: { $toObjectId: '$csvRecordId' },
+                        id: { $toString: '$_id' },
+                    }
+                },
+                {
+                    $lookup: {
+                        from: 'documentRecords',
+                        localField: 'recordId',
+                        foreignField: '_id',
+                        as: 'csvRecord'
+                    }
+                },
+                {
+                    $replaceRoot: { newRoot: { $mergeObjects: [ { $arrayElemAt: [ "$csvRecord", 0 ] }, "$$ROOT" ] } }
+                },
+                {
+                    $unset: ['data', 'csvRecord', '_id', 'csvRecordId', 'recordId', 'predictionId', 'documentId']
+                },
+            ])
+            .toArray()
+
+        const sheet: WorkSheet = workbook.Sheets[document.worksheetName]
+        const startRow = parseInt(document.worksheetStartRow)
+        const columnIndex: number = first(sheet["!data"][startRow]
+            .map((val: any, index: number) => (val === modelConfig.label) ? index : -1)
+            .filter((val: number) => val > -1))
+            .orElseThrow(() => new Error('Unable to find column: ' + modelConfig.label))
+
+        console.log('Set prediction values on worksheet')
+        let currentRow = startRow + 1;
+        results.forEach((result: Document) => {
+            sheet["!data"][currentRow++][columnIndex] = result.predictionValue
+        })
+
+        console.log('Writing buffer to stream')
+        bufferToStream(writeXls(workbook, {type: 'buffer', bookType: extension as any})).pipe(stream)
 
         return {stream, filename}
     }
