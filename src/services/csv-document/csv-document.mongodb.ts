@@ -536,14 +536,14 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
 
         const filename = `${name}-${prediction.model}.csv`
 
-        console.log('Creating stream')
+        console.log('Creating CSV stream')
         const stream = format({ headers: true })
 
-        console.log('Getting prediction records')
+        console.log('Getting prediction records for CSV file: ', prediction)
         this.predictionRecords
             .aggregate([
                 {
-                    $match: {predictionId: prediction.id}
+                    $match: { predictionId: prediction.id.toString() }
                 },
                 {
                     $addFields: {
@@ -594,7 +594,7 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
         const results: Document[] = await this.predictionRecords
             .aggregate([
                 {
-                    $match: { predictionId: prediction.id }
+                    $match: { predictionId: prediction.id.toString() }
                 },
                 {
                     $addFields: {
