@@ -31,7 +31,7 @@ export class CsvDocumentProcessor implements CsvDocumentProcessorApi {
         const models: string[] = await this.modelService.listAIModels()
             .then((result: AIModelModel[]) => result.map(val => val.name))
 
-        console.log(`   *** Processing new CSV Document: ${event.target.id} ***`)
+        console.log(`   *** Processing new CSV Document: ${event.target.id}, ${models} ***`)
         return Promise.all(models.map((model: string) => this.createCsvPrediction(event.target.id, model).then(() => true)))
             .then((result: boolean[]) => result.some(val => val))
     }
