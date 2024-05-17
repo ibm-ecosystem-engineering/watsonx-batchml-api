@@ -7,20 +7,27 @@ import {aiModelApi} from "../ai-model";
 
 export * from './csv-document-processor.api'
 
-let _instance: CsvDocumentProcessor
+let _instance: Promise<CsvDocumentProcessor>
 export const csvDocumentProcessor = async (): Promise<CsvDocumentProcessor> => {
     if (_instance) {
         return _instance
     }
 
-    return _instance = new CsvDocumentProcessor(
-        await csvDocumentApi(),
-        batchPredictorApi(),
-        aiModelApi(),
-    )
+    return _instance = new Promise(async (resolve, reject) => {
+        try {
+            resolve(new CsvDocumentProcessor(
+                await csvDocumentApi(),
+                batchPredictorApi(),
+                aiModelApi(),
+            ))
+        } catch (err) {
+            reject(err)
+        }
+    })
 }
 
 csvDocumentProcessor()
+    .catch((err) => console.log('Error creating csvDocumentProcessor', err))
 
 export const csvDocumentProcessorProvider: Provider = {
     provide: CsvDocumentProcessorApi,
