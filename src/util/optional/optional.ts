@@ -36,6 +36,7 @@ export abstract class Optional<T> {
     abstract filter(fn: (val: T) => boolean): Optional<T>
     abstract map<U>(fn: (val: T) => U): Optional<U>
     abstract flatMap<U>(fn: (val: T) => Optional<U>): Optional<U>
+    abstract walk<U>(key: keyof T): Optional<U>
     abstract or(fn: () => Optional<T>): Optional<T>
 
     abstract ifPresent(fn: (val: T) => void): Optional<T>
@@ -130,6 +131,14 @@ class OptionalImpl<T> implements Optional<T> {
         }
 
         return Optional.ofNullable(fn(this.value));
+    }
+
+    walk<U>(key: keyof T): Optional<U> {
+        if (!this.isPresent()) {
+            return empty
+        }
+
+        return Optional.ofNullable(this.value[key] as U)
     }
 
     or(fn: () => Optional<T>): Optional<T> {
