@@ -45,7 +45,7 @@ type CsvPrediction {
   documentId: String!
   id: ID!
   model: String!
-  performanceSummary: PerformanceSummary!
+  performanceSummary: PerformanceSummary
   predictionUrl: String!
   predictions: [CsvPredictionResult!]!
 }
