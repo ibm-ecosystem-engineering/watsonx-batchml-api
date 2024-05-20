@@ -15,6 +15,7 @@ export const PaginationInputBuilder = ({page, pageSize}: Partial<PaginationInput
 
 export interface PaginationMetadataModel extends PaginationInputModel {
     totalCount: number
+    hasMore: boolean
 }
 
 export interface PaginationResultModel<T> {

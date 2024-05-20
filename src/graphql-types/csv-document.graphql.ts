@@ -101,8 +101,8 @@ export class CsvPredictionCorrection implements CsvPredictionCorrectionModel {
     predictionRecordId: string;
     @Field()
     predictionValue: string;
-    @Field()
-    providedValue: string;
+    @Field({nullable: true})
+    providedValue?: string;
 }
 
 @ObjectType({description: 'CSV Prediction'})
@@ -135,8 +135,8 @@ export class CsvPredictionResult implements CsvPredictionResultModel {
     predictionId: string;
     @Field()
     csvRecordId: string;
-    @Field()
-    providedValue: string;
+    @Field({nullable: true})
+    providedValue?: string;
     @Field()
     predictionValue: string;
     @Field(() => Boolean, {nullable: true})
@@ -169,6 +169,8 @@ export class PaginationMetadata implements PaginationMetadataModel {
     pageSize: number;
     @Field(() => Number)
     totalCount: number;
+    @Field(() => Boolean)
+    hasMore: boolean;
 }
 
 @ObjectType({description: 'Paginated CsvDocumentRecords'})

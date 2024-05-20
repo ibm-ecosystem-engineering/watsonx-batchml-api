@@ -136,8 +136,8 @@ export class PerformanceSummary implements PredictionPerformanceSummaryModel {
     agreeBelowThreshold: number = 0;
     disagreeAboveThreshold: number = 0;
     disagreeBelowThreshold: number = 0;
-    confidenceThreshold: number;
-    correctedRecords: number;
+    confidenceThreshold: number = 0;
+    correctedRecords: number = 0;
     predictionId: string;
 
     constructor({predictionId, confidenceThreshold, totalCount, agreeAboveThreshold, agreeBelowThreshold, disagreeBelowThreshold, disagreeAboveThreshold, correctedRecords}: Partial<PredictionPerformanceSummaryModel> = {}) {
@@ -152,7 +152,7 @@ export class PerformanceSummary implements PredictionPerformanceSummaryModel {
     }
 
     addStat(stat: StatAggregation): PerformanceSummary {
-        this[stat.stat] = stat.count
+        this[stat.stat] = this[stat.stat] + stat.count
 
         return this;
     }
