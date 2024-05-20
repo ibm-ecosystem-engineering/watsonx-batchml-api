@@ -1,4 +1,4 @@
-import {BatchPredictionResult, BatchPredictorApi} from "../batch-predictor";
+import {BatchPredictionResult, BatchPredictionValue, BatchPredictorApi} from "../batch-predictor";
 import {CsvDocumentApi} from "../csv-document";
 import {
     AIModelModel,
@@ -37,10 +37,25 @@ export class CsvDocumentProcessor implements CsvDocumentProcessorApi {
     }
 
     async createCsvPrediction(documentId: string, model?: string): Promise<CsvPredictionModel> {
-        const data: PaginationResultModel<CsvDocumentRecordModel> = await this.service.listCsvDocumentRecords(documentId, {page: 1, pageSize: -1})
+        const date = new Date();
+        // TODO use a universal constant here
+        const pageSize = 30000;
 
-        const prediction: BatchPredictionResult = await this.predictorService.predictValues(data.data, model)
+        let more = true;
+        let page = 1;
+        let results: BatchPredictionValue[] = []
+        while (more) {
+            console.log('Listing csv document records: ', {page, pageSize})
+            const data: PaginationResultModel<CsvDocumentRecordModel> = await this.service.listCsvDocumentRecords(documentId, {page, pageSize})
 
-        return this.service.addCsvDocumentPrediction(documentId, prediction)
+            console.log('  Predicting values: ', data.metadata)
+            const prediction: BatchPredictionResult = await this.predictorService.predictValues(data.data, model)
+
+            more = data.metadata.hasMore
+            page = page + 1
+            results = results.concat(prediction.results)
+        }
+
+        return this.service.addCsvDocumentPrediction(documentId, {date, model, results})
     }
 }

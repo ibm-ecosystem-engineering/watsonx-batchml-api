@@ -59,7 +59,7 @@ type CsvPredictionCorrection {
   predictionId: String!
   predictionRecordId: String!
   predictionValue: String!
-  providedValue: String!
+  providedValue: String
 }
 
 """Filter for csv prediction records"""
@@ -85,7 +85,7 @@ type CsvPredictionResult {
   id: ID!
   predictionId: String!
   predictionValue: String!
-  providedValue: String!
+  providedValue: String
 }
 
 type Mutation {
@@ -119,6 +119,7 @@ input PaginationInput {
 
 """Pagination metadata"""
 type PaginationMetadata {
+  hasMore: Boolean!
   page: Float!
   pageSize: Float!
   totalCount: Float!

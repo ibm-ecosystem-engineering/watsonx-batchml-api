@@ -34,12 +34,12 @@ import {
     CsvPredictionResultModel,
     CsvUpdatedDocumentInputModel,
     PaginationInputModel,
+    PaginationMetadataModel,
     PaginationResultModel,
     PerformanceSummaryModel,
     PredictionPerformanceSummaryModel
 } from "../../models";
-import {first, Optional, streamToBuffer} from "../../util";
-import {notEmpty} from "../../util/array-util";
+import {first, notEmpty, Optional, streamToBuffer} from "../../util";
 
 interface InternalCsvDocumentModel extends CsvDocumentInputModel {
     id: string;
@@ -64,6 +64,23 @@ const summaryPipeline = (ids: string[], match: Partial<{[key in keyof CsvPredict
         {$match: {predictionId: {$in: ids}}},
         {$group: {_id: "$predictionId", count: {$sum: 1}}}
     ]
+}
+
+interface SummaryFacet {
+    totalCount: number[],
+    agreeAboveThreshold: number[],
+    agreeBelowThreshold: number[],
+    disagreeAboveThreshold: number[],
+    disagreeBelowThreshold: number[]
+}
+
+const buildPaginationMetadata = ({totalCount, page, pageSize}: {totalCount: number, page: number, pageSize: number}): PaginationMetadataModel => {
+    return {
+        totalCount,
+        page,
+        pageSize,
+        hasMore: (page * pageSize) < totalCount
+    }
 }
 
 export class CsvDocumentMongodb implements CsvDocumentApi {
@@ -113,7 +130,7 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
         return this
     }
 
-    async addCsvDocument(input: CsvDocumentInputModel, file: { filename: string; buffer: Buffer; }): Promise<CsvDocumentModel> {
+    async addCsvDocument(input: CsvDocumentInputModel, file: { filename: string; buffer: Buffer }): Promise<CsvDocumentModel> {
 
         // insert document
         const document: CsvDocumentModel = await this.insertCsvDocument(Object.assign(input, {status: CsvDocumentStatus.InProgress}));
@@ -126,10 +143,16 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
         console.log('Parsing rows from doc')
         const rows: CsvDocumentRecordModel[] = await parseDocumentRows(document, {filename: document.name, buffer: file.buffer})
 
+        // TODO should this be split?
         console.log('Inserting csv rows: ' + rows.length)
-        await this.documentRecords.insertMany(rows)
+        this.documentRecords.insertMany(rows)
+            .then(() => {
+                console.log('  Csv rows inserted: ' + rows.length)
+                documentEvents.add(document)
+            })
+            .catch(err => console.log('  Error inserting rows', err))
 
-        return documentEvents.add(document)
+        return document
     }
 
     async addCorrectedCsvDocument(input: CsvUpdatedDocumentInputModel, file: FileInfo): Promise<CsvDocumentModel> {
@@ -226,27 +249,29 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
     }
 
     async listCsvDocumentRecords(documentId: string, {page, pageSize}: PaginationInputModel): Promise<PaginationResultModel<CsvDocumentRecordModel>> {
-        const dataFilter = pageSize === -1
-            ? [{$skip: (page - 1) * pageSize}]
-            : [{$skip: (page - 1) * pageSize}, {$limit: pageSize}]
+        page = page > 0 ? page : 1
+        pageSize = pageSize !== -1 ? pageSize : Number.MAX_SAFE_INTEGER
 
+        const totalCount = await this.documentRecords.countDocuments({documentId})
         const result: Document[] = await this.documentRecords
             .aggregate([
                 {
                     $match: {documentId}
                 },
                 {
-                    $facet: {
-                        metadata: [{$count: 'totalCount'}],
-                        data: dataFilter,
-                    },
+                    $skip: (page - 1) * pageSize
+                },
+                {
+                    $limit: pageSize
                 }
             ])
             .toArray()
 
+        console.log('Results length: ' + result.length)
+
         return {
-            metadata: {totalCount: result[0].metadata[0].totalCount, page, pageSize},
-            data: result[0].data.map(val => Object.assign({}, val, {id: val._id})),
+            metadata: buildPaginationMetadata({totalCount, page, pageSize}),
+            data: result.map(val => Object.assign({}, val, {id: val._id})) as any,
         }
     }
 
@@ -310,7 +335,46 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
         // {$match: {predictionId: {$in: ids}}},
         // {$group: {_id: "$predictionId", count: {$sum: 1}}}
 
-        const result = first(await this.predictionRecords
+        let page: number = 0;
+        const limit: number = 50000;
+        let results: StatAggregation[] = []
+        let more: boolean = true
+        while (more) {
+            const {stats, more: _more} = await this.getPredictionSummaryDocument(predictionIds, page, limit)
+
+            more = _more
+            page = page + 1
+            results = results.concat(stats)
+        }
+
+        const correctedRecords: StatAggregation[] = await this.predictionCorrectionRecords
+            .aggregate(summaryPipeline(predictionIds))
+            .toArray()
+            .then(aggregateStats('correctedRecords'));
+
+        return results
+            .concat(correctedRecords)
+            .reduce((result: PerformanceSummary[], current: StatAggregation) => {
+                const currentSummary: PerformanceSummary = first(result.filter(val => val.predictionId === current.predictionId))
+                    .orElseGet(() => {
+                        const value = new PerformanceSummary({predictionId: current.predictionId, confidenceThreshold})
+
+                        result.push(value)
+
+                        return value
+                    })
+
+                currentSummary.addStat(current)
+
+                return result
+            }, [])
+            .map(val => val.toModel())
+    }
+
+    async getPredictionSummaryDocument(predictionIds: string[], page: number, limit: number): Promise<{stats: StatAggregation[], more: boolean}> {
+        console.log('Getting prediction summary document: ', {predictionIds, page, limit})
+
+        const result: SummaryFacet = first(await this.predictionRecords
             .aggregate([
                 {
                     $match: {predictionId: {$in: predictionIds}}
@@ -342,30 +406,23 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
             .toArray())
             .orElseThrow(() => new Error('Performance summary results missing'))
 
-        const correctedRecords: StatAggregation[] = await this.predictionCorrectionRecords
-            .aggregate(summaryPipeline(predictionIds))
-            .toArray()
-            .then(aggregateStats('correctedRecords'));
+        console.log('Summary result: ', result)
 
-        return Object.keys(result)
+        const stats: StatAggregation[] = Object.keys(result)
             .flatMap((stat: keyof PerformanceSummaryModel): StatAggregation => {
                 return result[stat].map((val: Document): StatAggregation => ({predictionId: val._id, count: val.count, stat}))
             })
-            .concat(correctedRecords)
-            .reduce((result: PerformanceSummary[], current: StatAggregation) => {
-                const currentSummary: PerformanceSummary = first(result.filter(val => val.predictionId === current.predictionId))
-                    .orElseGet(() => {
-                        const value = new PerformanceSummary({predictionId: current.predictionId, confidenceThreshold})
 
-                        result.push(value)
+        const totalCount: number = stats
+            .filter(val => val.stat === 'totalCount')
+            .reduce((result: number, current: StatAggregation) => {
+                return result + current.count
+            }, 0)
 
-                        return value
-                    })
-
-                currentSummary.addStat(current)
-
-                return result
-            }, [])
+        return {
+            stats,
+            more: false,
+        }
     }
 
     async listCsvDocuments({page, pageSize}: PaginationInputModel, status?: CsvDocumentStatus): Promise<PaginationResultModel<CsvDocumentModel>> {
@@ -406,7 +463,7 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
             .orElse([])
 
         return {
-            metadata: {totalCount, page, pageSize},
+            metadata: buildPaginationMetadata({totalCount, page, pageSize}),
             data: data.map(val => Object.assign({}, val, {id: val._id})),
         }
 
@@ -492,7 +549,7 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
             .toArray()
 
         return {
-            metadata: {totalCount: results[0].metadata[0].totalCount, page, pageSize},
+            metadata: buildPaginationMetadata({totalCount: results[0].metadata[0].totalCount, page, pageSize}),
             data: results[0].data,
         }
     }

@@ -86,7 +86,7 @@ export interface CsvPredictionResultModel {
     documentId: string;
     predictionId: string;
     csvRecordId: string;
-    providedValue: string;
+    providedValue?: string;
     predictionValue: string;
     agree: boolean;
     confidence: number;
@@ -98,7 +98,7 @@ export interface CsvPredictionCorrectionModel {
     documentId: string;
     predictionId: string;
     predictionRecordId: string;
-    providedValue: string;
+    providedValue?: string;
     predictionValue: string;
     agree: boolean;
     confidence: number;
