@@ -46,6 +46,7 @@ type CsvPrediction {
   id: ID!
   model: String!
   performanceSummary: PerformanceSummary
+  predictionField: String
   predictionUrl: String!
   predictions: [CsvPredictionResult!]!
 }
@@ -67,6 +68,7 @@ enum CsvPredictionRecordFilter {
   All
   AllBelowConfidence
   AllDisagree
+  DisagreeAboveConfidence
   DisagreeBelowConfidence
 }
 

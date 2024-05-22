@@ -267,7 +267,7 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
             ])
             .toArray()
 
-        console.log('Results length: ' + result.length)
+        console.log('  Results length: ' + result.length)
 
         return {
             metadata: buildPaginationMetadata({totalCount, page, pageSize}),
@@ -499,8 +499,11 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
 
         if (filter === CsvPredictionRecordFilter.DisagreeBelowConfidence || filter === CsvPredictionRecordFilter.AllBelowConfidence) {
             query['confidence'] = {$lt: confidenceThreshold}
+        } else if (filter === CsvPredictionRecordFilter.DisagreeAboveConfidence) {
+            query['confidence'] = {$gte: confidenceThreshold}
         }
-        if (filter === CsvPredictionRecordFilter.AllDisagree || filter === CsvPredictionRecordFilter.DisagreeBelowConfidence) {
+
+        if (filter === CsvPredictionRecordFilter.AllDisagree || filter === CsvPredictionRecordFilter.DisagreeBelowConfidence || filter === CsvPredictionRecordFilter.DisagreeAboveConfidence) {
             query['agree'] = false
         }
 

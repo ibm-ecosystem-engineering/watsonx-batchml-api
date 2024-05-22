@@ -41,21 +41,43 @@ export class CsvDocumentProcessor implements CsvDocumentProcessorApi {
         // TODO use a universal constant here
         const pageSize = 30000;
 
-        let more = true;
-        let page = 1;
-        let results: BatchPredictionValue[] = []
-        while (more) {
+        const createPredictions = async (docId: string, model: string, page: number, pageSize: number): Promise<{predictions: BatchPredictionValue[], hasMore: boolean, predictionField: string}> => {
             console.log('Listing csv document records: ', {page, pageSize})
             const data: PaginationResultModel<CsvDocumentRecordModel> = await this.service.listCsvDocumentRecords(documentId, {page, pageSize})
 
             console.log('  Predicting values: ', data.metadata)
             const prediction: BatchPredictionResult = await this.predictorService.predictValues(data.data, model)
 
-            more = data.metadata.hasMore
-            page = page + 1
-            results = results.concat(prediction.results)
+            return {predictions: prediction.results, hasMore: data.metadata.hasMore, predictionField: prediction.predictionField}
         }
 
-        return this.service.addCsvDocumentPrediction(documentId, {date, model, results})
+        let more = true
+        let page = 1
+        let retryCount = 0
+        let results: BatchPredictionValue[] = []
+        let predictionField = ''
+        while (more) {
+            try {
+                const {predictions, hasMore, predictionField:label} = await createPredictions(documentId, model, page, pageSize)
+
+                more = hasMore
+                page = page + 1
+                results = results.concat(predictions)
+                predictionField = label
+                retryCount = 0
+            } catch (err) {
+                if (retryCount < 3) {
+                    retryCount = retryCount + 1
+                    console.log(`Error getting predictions. Attempting retry ${retryCount}`)
+                } else {
+                    console.log(`Error getting predictions. No more retries.`)
+                    more = true
+                    page = page + 1
+                    retryCount = 0
+                }
+            }
+        }
+
+        return this.service.addCsvDocumentPrediction(documentId, {date, model, results, predictionField})
     }
 }

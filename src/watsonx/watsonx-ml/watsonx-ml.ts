@@ -24,6 +24,7 @@ export interface PredictionValue {
 export interface PredictionResponse<T = any> {
     model: string;
     date: Date;
+    predictionField: string;
     results: PredictionValue[];
 }
 
@@ -97,7 +98,8 @@ export class WatsonxMl {
                 return {
                     model: deploymentId,
                     date: new Date(),
-                    results: data
+                    results: data,
+                    predictionField: label
                 }
             })
     }

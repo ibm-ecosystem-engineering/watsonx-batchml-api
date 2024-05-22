@@ -13,6 +13,15 @@ export class BatchPredictorWatsonx implements BatchPredictorApi {
     }
 
     async predictValues(data: CsvDocumentRecordModel[], model?: string): Promise<BatchPredictionResult> {
+        if (!data || data.length === 0) {
+            return {
+                date: new Date(),
+                model,
+                predictionField: '',
+                results: []
+            }
+        }
+
         return this.service
             .predict({data}, model)
             .then(result => {
@@ -26,15 +35,6 @@ export class BatchPredictorWatsonx implements BatchPredictorApi {
                     )))
 
                 return Object.assign({}, result, {results})
-            })
-            .catch(err => {
-                console.log('Error calculating predictions: ', err)
-
-                return {
-                    date: new Date(),
-                    model,
-                    results: []
-                }
             })
     }
 

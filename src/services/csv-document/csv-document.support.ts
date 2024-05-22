@@ -226,11 +226,31 @@ export class EventManager<T extends {id: string}> {
 
 export type CompareFn = (prediction: unknown, provided: unknown) => boolean
 
+const convertString = (value: unknown) => {
+    if (typeof value === 'string') {
+        const s = value.trim()
+
+        const regex = /No Reporting/i
+        if (regex.test(s)) {
+            return ''
+        }
+
+        return s
+    }
+
+    return value
+}
+
 export const convertValue = (value: unknown): unknown => {
     const num = parseFloat(value as string)
 
     if (isNaN(num)) {
-        return value
+        return convertString(value)
+    }
+
+    if (('' + value).endsWith('%')) {
+        // convert to decimal
+        return num.valueOf() / 100
     }
 
     return num.valueOf()
@@ -247,6 +267,10 @@ export const defaultCompareFn: CompareFn = (prediction: unknown, provided: unkno
             value,
             convertedValue
         }
+    }
+
+    if (!result) {
+        console.log('No field match: ', {prediction: buildReport(prediction), provided: buildReport(provided)})
     }
 
     return result

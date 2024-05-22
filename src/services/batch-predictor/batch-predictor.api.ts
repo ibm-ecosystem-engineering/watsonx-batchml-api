@@ -3,6 +3,7 @@ import {CsvDocumentEventModel, CsvDocumentRecordModel, CsvPredictionResultModel}
 export interface BatchPredictionResult {
     date: Date;
     model: string;
+    predictionField: string;
     results: BatchPredictionValue[];
 }
 

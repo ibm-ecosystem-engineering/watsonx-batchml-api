@@ -123,6 +123,8 @@ export class CsvPrediction implements CsvPredictionModel {
     performanceSummary?: PerformanceSummaryModel;
     @Field(() => [CsvPredictionCorrection], {nullable: true})
     corrections?: CsvPredictionCorrectionModel[];
+    @Field({nullable: true})
+    predictionField?: string;
 }
 
 @ObjectType({description: 'CSV Prediction Result'})

@@ -76,6 +76,7 @@ export interface CsvPredictionModel {
     model: string;
     date: string;
     predictionUrl: string;
+    predictionField?: string;
     predictions: CsvPredictionResultModel[];
     corrections?: CsvPredictionCorrectionModel[];
     performanceSummary?: PerformanceSummaryModel;
@@ -141,5 +142,6 @@ export enum CsvPredictionRecordFilter {
     All = 'All',
     AllDisagree = 'AllDisagree',
     AllBelowConfidence = 'AllBelowConfidence',
+    DisagreeAboveConfidence = 'DisagreeAboveConfidence',
     DisagreeBelowConfidence = 'DisagreeBelowConfidence'
 }

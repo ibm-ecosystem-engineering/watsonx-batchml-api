@@ -32,6 +32,7 @@ export interface CsvDocumentPredictionResult {
     model: string;
     date: Date;
     results: BatchPredictionValue[];
+    predictionField: string;
 }
 
 export interface CsvPredictionRecordOptionsModel {
