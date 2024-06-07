@@ -132,12 +132,16 @@ export class WatsonxMl {
     }
 
     private buildPayload<T>(input: PredictionInput<T>, fields: Array<string | DeploymentField>): PredictionPayload {
-        return {
+        const payload = {
             input_data: [{
                 fields: fields.map(val => isDeploymentField(val) ? val.name : val),
                 values: input.data.map(flatten(fields))
             }]
         }
+
+        console.log('Payload: ', {fields: payload.input_data[0].fields, values: first(payload.input_data[0].values).orElse([])})
+
+        return payload
     }
 }
 

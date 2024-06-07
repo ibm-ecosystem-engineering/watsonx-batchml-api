@@ -1,0 +1,14 @@
+FROM registry.access.redhat.com/ubi9/nodejs-18:1-108.1714669798
+# https://catalog.redhat.com/software/containers/ubi9/nodejs-18/62e8e7ed22d1d3c2dfe2ca01
+
+WORKDIR /opt/app-root/dev
+
+RUN ls -lA && \
+    mkdir -p /opt/app-root/dev/node_modules
+
+ENV HOST=0.0.0.0 PORT=3000
+
+EXPOSE 3000/tcp
+
+CMD ["npm", "run", "startdev"]
+

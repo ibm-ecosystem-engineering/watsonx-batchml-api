@@ -40,6 +40,7 @@ import {
     PredictionPerformanceSummaryModel
 } from "../../models";
 import {first, notEmpty, Optional, streamToBuffer} from "../../util";
+import {MetricsApi} from "../metrics";
 
 interface InternalCsvDocumentModel extends CsvDocumentInputModel {
     id: string;
@@ -91,7 +92,7 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
     private readonly predictionCorrectionRecords: Collection<CsvPredictionCorrectionModel>;
     private readonly bucket: GridFSBucket;
 
-    constructor(db: Db, private readonly aiModelApi: AiModelApi) {
+    constructor(db: Db, private readonly aiModelApi: AiModelApi, private readonly metricsApi: MetricsApi) {
         this.documents = db.collection<CsvDocumentModel>('documents')
         this.documentRecords = db.collection<CsvDocumentRecordModel>('documentRecords')
 
@@ -142,6 +143,8 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
         // insert records
         console.log('Parsing rows from doc')
         const rows: CsvDocumentRecordModel[] = await parseDocumentRows(document, {filename: document.name, buffer: file.buffer})
+
+        this.metricsApi.getMemoryUsage().then(metrics => console.log('Memory usage:', metrics))
 
         // TODO should this be split?
         console.log('Inserting csv rows: ' + rows.length)
@@ -761,7 +764,7 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
                 return
             }
 
-            const cell: CellValue = sheet[key]
+            const cell: CellValue = sheet[key] || {t: 's', v: '', w: ''}
 
             cell.v = result.predictionValue
         })
