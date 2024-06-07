@@ -1,4 +1,4 @@
-import {Stream} from "stream";
+import {PassThrough, Stream} from "stream";
 
 const isBuffer = (val: unknown): val is Buffer => {
     return !!val && !!((val as Buffer).buffer)
@@ -16,4 +16,14 @@ export const streamToBuffer = async (stream: NodeJS.ReadableStream | Buffer | St
         stream.on('error', (err) => reject(err));
         stream.on('end', () => resolve(Buffer.concat(buffers)));
     })
+}
+
+
+export const mergeStreams = (...streams) => {
+    let pass = new PassThrough()
+    for (let stream of streams) {
+        const end = stream == streams.at(-1);
+        pass = stream.pipe(pass, { end })
+    }
+    return pass
 }

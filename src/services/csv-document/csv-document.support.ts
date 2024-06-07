@@ -104,7 +104,7 @@ const parseCsvStream = async <T = any>(parser: Parser, stream: Stream): Promise<
         const records: T[] = []
 
         parser.on('readable', function(){
-            let record;
+            let record: any;
             while ((record = parser.read()) !== null) {
                 records.push(record);
             }
