@@ -16,11 +16,11 @@ const _models: AIModelModel[] = [{
         "MCO_NO",
         "MCO_CMP_NO",
         "CTRY_NO",
-        "SERVICE_PERFORMED_IN",
-        "NEC_DESCRIPTION",
-        "NEC_CODE",
-        "MARKETING_LEGAL_ENTITY_NAME",
-        "PERFORMING_LEGAL_ENTITY_NAME",
+        {name: "SERVICE_PERFORMED_IN", aliases: ["COUNTRY_WHERE_SERVICE_WAS_PERF"]},
+        {name: "NEC_DESCRIPTION", aliases: ["MATERIAL DESCRIPTION"]},
+        {name: "NEC_CODE", aliases: ["IC MATERIAL"]},
+        {name: "MARKETING_LEGAL_ENTITY_NAME", aliases: ["CC_NAME"]},
+        {name: "PERFORMING_LEGAL_ENTITY_NAME", aliases: ["TP_NAME"]},
         {
             name: "Full_Description_Unique",
             formatter: <T> (data: T, fields: InputField[], currentField: InputField): string => {
