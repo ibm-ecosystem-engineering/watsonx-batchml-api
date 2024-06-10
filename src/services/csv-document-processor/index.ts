@@ -17,8 +17,8 @@ export const csvDocumentProcessor = async (): Promise<CsvDocumentProcessor> => {
         try {
             resolve(new CsvDocumentProcessor(
                 await csvDocumentApi(),
-                batchPredictorApi(),
-                aiModelApi(),
+                await batchPredictorApi(),
+                await aiModelApi(),
             ))
         } catch (err) {
             reject(err)

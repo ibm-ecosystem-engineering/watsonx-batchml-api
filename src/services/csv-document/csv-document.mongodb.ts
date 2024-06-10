@@ -636,7 +636,7 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
     }
 
     private async getPredictionExcelDocument(document: CsvDocumentModel, prediction: CsvPredictionModel): Promise<{stream: Stream, filename: string}> {
-        const modelConfig: AIModelModel = await this.aiModelApi.getAIModel(prediction.model)
+        const modelConfig: AIModelModel = await this.aiModelApi.findAIModel(prediction.model)
 
         const name = parsePath(document.name).name
         const extension = extname(document.name).replace(/^[.]/, '')
