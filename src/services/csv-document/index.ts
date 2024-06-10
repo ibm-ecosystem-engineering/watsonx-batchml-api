@@ -23,7 +23,9 @@ export const csvDocumentApi = async (): Promise<CsvDocumentApi> => {
     }
 
     console.log('  ** CsvDocumentApi: CsvDocumentMongodb')
-    return _instance = new CsvDocumentMongodb(await mongodbClient(), aiModelApi(), metricsApi()).init()
+    return _instance = new Promise(async (resolve) => {
+        resolve(new CsvDocumentMongodb(await mongodbClient(), await aiModelApi(), metricsApi()).init())
+    })
 }
 
 export const csvDocumentProvider: Provider = {

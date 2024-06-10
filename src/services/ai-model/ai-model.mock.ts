@@ -1,17 +1,11 @@
 import {AiModelApi} from "./ai-model.api";
-import {
-    AIModelModel,
-    getAIModelInputValue,
-    InputField,
-    isAIModelInputModel,
-    isMatchingAIModelInputModel
-} from "../../models";
+import {AIModelModel, getAIModelInputValue, InputField, isMatchingAIModelInputModel} from "../../models";
 import {first} from "../../util";
 
 const _models: AIModelModel[] = [{
     id: '1',
-    name: 'tax_withholding_v4',
-    deploymentId: 'tax_withholding_v4',
+    name: 'tax_withholding_v5',
+    deploymentId: 'tax_withholding_v5',
     inputs: [
         "MCO_NO",
         "MCO_CMP_NO",
@@ -56,6 +50,16 @@ const nextId = (): string => {
 }
 
 export class AiModelMock implements AiModelApi {
+    async addAIModels(inputs: Omit<AIModelModel, "id">[]): Promise<AIModelModel[]> {
+        return Promise.all(
+            inputs.map(model => this.addAIModel(model))
+        )
+    }
+
+    async findAIModel(name: string): Promise<AIModelModel> {
+        return first(_models.filter(val => val.name === name)).orElse(undefined);
+    }
+
     async addAIModel(input: Omit<AIModelModel, "id">): Promise<AIModelModel> {
         const model = Object.assign({}, input, {id: nextId()})
 

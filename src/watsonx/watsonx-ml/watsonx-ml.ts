@@ -117,7 +117,7 @@ export class WatsonxMl {
 
         if (deployment) {
             try {
-                return await this.service.getAIModel(deployment)
+                return await this.service.findAIModel(deployment)
                     .then((result: AIModelModel) => ({
                         deploymentId: result.deploymentId,
                         deploymentFields: result.inputs,

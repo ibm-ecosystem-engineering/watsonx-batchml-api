@@ -4,8 +4,8 @@ import {aiModelApi} from "../../services";
 
 export * from './watsonx-ml'
 
-let _instance: WatsonxMl;
-export const buildMl = (): WatsonxMl => {
+let _instance: Promise<WatsonxMl>;
+export const buildMl = (): Promise<WatsonxMl> => {
     if (_instance) {
         return _instance
     }
@@ -16,5 +16,7 @@ export const buildMl = (): WatsonxMl => {
         throw new Error('watsonx config not provided!!!!')
     }
 
-    return _instance = new WatsonxMl(aiModelApi(), config)
+    return _instance = new Promise(async resolve => {
+        resolve(new WatsonxMl(await aiModelApi(), config))
+    })
 }
