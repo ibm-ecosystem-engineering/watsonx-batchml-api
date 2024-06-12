@@ -434,6 +434,8 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
 
         if (status) {
             pipeline.push({$match: {status}})
+        } else {
+            pipeline.push({$match: {status: {$ne: CsvDocumentStatus.Deleted}}})
         }
 
         const dataFilter = pageSize === -1
