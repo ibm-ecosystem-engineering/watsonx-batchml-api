@@ -39,6 +39,9 @@ export interface CsvPredictionRecordOptionsModel {
     filter?: CsvPredictionRecordFilter
 }
 
+export const TOPIC_CSV_DOCUMENT = 'csvDocumentEvent'
+export const TOPIC_PREDICTION = 'predictionEvent'
+
 export abstract class CsvDocumentApi {
     abstract addCsvDocument(input: CsvDocumentInputModel, file: {filename: string, buffer: Buffer}): Promise<CsvDocumentModel>
     abstract addCorrectedCsvDocument(input: CsvUpdatedDocumentInputModel, file: {filename: string, buffer: Buffer}): Promise<CsvDocumentModel>

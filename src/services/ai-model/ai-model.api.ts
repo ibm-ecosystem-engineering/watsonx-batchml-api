@@ -6,4 +6,5 @@ export abstract class AiModelApi {
     abstract listAIModels(): Promise<AIModelModel[]>
     abstract findAIModel(name: string): Promise<AIModelModel>
     abstract getAIModel(id: string): Promise<AIModelModel>
+    abstract getDefaultModel(): Promise<AIModelModel>
 }

@@ -2,7 +2,7 @@ import Axios, {AxiosInstance} from 'axios';
 import {IamTokenManager} from "ibm-cloud-sdk-core";
 
 import {WatsonxConfig} from "../../backends";
-import {AIModelModel} from "../../models";
+import {AIModelInputModel, AIModelModel} from "../../models";
 import {AiModelApi} from "../../services";
 import {first, pThrottle} from "../../util";
 
@@ -109,26 +109,24 @@ export class WatsonxMl {
     }
 
     private async getDeployment(deployment?: string): Promise<DeploymentConfig> {
-        const defaultConfig = {
-            deploymentId: this.config.defaultDeploymentId,
-            deploymentFields: this.config.defaultDeploymentFields,
-            label: this.config.defaultLabel,
-        }
+
+        const deploymentFromAIModel = (result: AIModelModel): DeploymentConfig => ({
+            deploymentId: result.deploymentId,
+            deploymentFields: result.inputs,
+            label: result.label
+        })
 
         if (deployment) {
             try {
                 return await this.service.findAIModel(deployment)
-                    .then((result: AIModelModel) => ({
-                        deploymentId: result.deploymentId,
-                        deploymentFields: result.inputs,
-                        label: result.label
-                    }))
+                    .then(deploymentFromAIModel)
             } catch (err) {
                 console.error('Error getting model: ' + deployment, err)
             }
         }
 
-        return defaultConfig;
+        return this.service.getDefaultModel()
+            .then(deploymentFromAIModel);
     }
 
     private buildPayload<T>(input: PredictionInput<T>, fields: Array<string | DeploymentField>): PredictionPayload {

@@ -1,11 +1,13 @@
 import {AiModelApi} from "./ai-model.api";
 import {AIModelModel, getAIModelInputValue, InputField, isMatchingAIModelInputModel} from "../../models";
 import {first} from "../../util";
+import {fullDescriptionUniqueFormatter} from "./ai-model.support";
 
 const _models: AIModelModel[] = [{
-    id: '1',
-    name: 'tax_withholding_v5',
-    deploymentId: 'tax_withholding_v5',
+    id: '2',
+    name: 'tax_withholding_v6a',
+    deploymentId: 'tax_withholding_v6a',
+    default: true,
     inputs: [
         "MCO_NO",
         "MCO_CMP_NO",
@@ -17,29 +19,11 @@ const _models: AIModelModel[] = [{
         {name: "PERFORMING_LEGAL_ENTITY_NAME", aliases: ["TP_NAME"]},
         {
             name: "Full_Description_Unique",
-            formatter: <T> (data: T, fields: InputField[], currentField: InputField): string => {
-                return fields.filter(field => !isMatchingAIModelInputModel(field, currentField))
-                    .map(getAIModelInputValue(data))
-                    .join(' ')
-            }
+            formatter: fullDescriptionUniqueFormatter,
+            formatterName: 'fullDescriptionUniqueFormatter'
         }
     ],
     label: "WHT_PER"
-// }, {
-//     id: '2',
-//     name: 'tax_withholding_v2',
-//     deploymentId: 'tax_withholding_v2',
-//     inputs: [
-//         "MCO_NO",
-//         "MCO_CMP_NO",
-//         "CTRY_NO",
-//         "SERVICE_PERFORMED_IN",
-//         {name: "NEC_DESCRIPTION_Cleaned", aliases: ["NEC_DESCRIPTION"]},
-//         "NEC_CODE",
-//         "MARKETING_LEGAL_ENTITY_NAME",
-//         "PERFORMING_LEGAL_ENTITY_NAME"
-//     ],
-//     label: "WHT_PER"
 }]
 
 let _id: number = _models.length
@@ -50,6 +34,12 @@ const nextId = (): string => {
 }
 
 export class AiModelMock implements AiModelApi {
+    async getDefaultModel(): Promise<AIModelModel> {
+        return first(_models.filter(val => val.default))
+            .or(() => first(_models))
+            .orElseThrow(() => new Error('No default AI model found'));
+    }
+
     async addAIModels(inputs: Omit<AIModelModel, "id">[]): Promise<AIModelModel[]> {
         return Promise.all(
             inputs.map(model => this.addAIModel(model))

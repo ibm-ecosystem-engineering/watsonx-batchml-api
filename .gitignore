@@ -13,3 +13,4 @@ test-report.xml
 **/charts/*.tgz
 Chart.lock
 .env
+output.log

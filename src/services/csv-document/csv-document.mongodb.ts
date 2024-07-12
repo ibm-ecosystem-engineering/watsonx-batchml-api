@@ -10,10 +10,6 @@ import {
     bufferToStream,
     CompareFn,
     defaultCompareFn,
-    EventManager,
-    FileInfo,
-    parseDocumentRows,
-    parsePredictionRows,
     PerformanceSummary,
     StatAggregation,
 } from "./csv-document.support";
@@ -41,6 +37,8 @@ import {
 } from "../../models";
 import {first, notEmpty, Optional, streamToBuffer} from "../../util";
 import {MetricsApi} from "../metrics";
+import {PubSubApi} from "../pub-sub";
+import {CsvDocumentAbstract} from "./csv-document.abstract";
 
 interface InternalCsvDocumentModel extends CsvDocumentInputModel {
     id: string;
@@ -48,10 +46,7 @@ interface InternalCsvDocumentModel extends CsvDocumentInputModel {
     originalUrl: string;
 }
 
-const confidenceThreshold: number = 0.8
-
-const documentEvents: EventManager<CsvDocumentModel> = new EventManager<CsvDocumentModel>()
-const predictionEvents: EventManager<CsvPredictionModel> = new EventManager<CsvPredictionModel>()
+const confidenceThreshold: number = 0.75
 
 type MongodbCsvPredictionModel = OptionalId<Omit<CsvPredictionModel, 'id | predictions | performanceSummary | date'> & {date: Date}>
 type MongodbCsvPredictionResultModel = OptionalId<CsvPredictionResultModel>
@@ -84,7 +79,7 @@ const buildPaginationMetadata = ({totalCount, page, pageSize}: {totalCount: numb
     }
 }
 
-export class CsvDocumentMongodb implements CsvDocumentApi {
+export class CsvDocumentMongodb extends CsvDocumentAbstract<CsvDocumentMongodb> implements CsvDocumentApi {
     private readonly documents: Collection<CsvDocumentModel>;
     private readonly documentRecords: Collection<CsvDocumentRecordModel>;
     private readonly predictions: Collection<CsvPredictionModel>;
@@ -92,7 +87,9 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
     private readonly predictionCorrectionRecords: Collection<CsvPredictionCorrectionModel>;
     private readonly bucket: GridFSBucket;
 
-    constructor(db: Db, private readonly aiModelApi: AiModelApi, private readonly metricsApi: MetricsApi) {
+    constructor(db: Db, private readonly aiModelApi: AiModelApi, private readonly metricsApi: MetricsApi, pubSubApi: PubSubApi) {
+        super(pubSubApi)
+
         this.documents = db.collection<CsvDocumentModel>('documents')
         this.documentRecords = db.collection<CsvDocumentRecordModel>('documentRecords')
 
@@ -131,69 +128,23 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
         return this
     }
 
-    async addCsvDocument(input: CsvDocumentInputModel, file: { filename: string; buffer: Buffer }): Promise<CsvDocumentModel> {
+    async insertCsvDocumentRecords(records: CsvDocumentRecordModel[]): Promise<string[]> {
+        const result = await this.documentRecords.insertMany(records)
 
-        // insert document
-        const document: CsvDocumentModel = await this.insertCsvDocument(Object.assign(input, {status: CsvDocumentStatus.InProgress}));
-
-        // upload file
-        console.log('Uploading file to database')
-        const filename = await this.uploadDocumentFile(file, document);
-
-        // insert records
-        console.log('Parsing rows from doc')
-        const rows: CsvDocumentRecordModel[] = await parseDocumentRows(document, {filename: document.name, buffer: file.buffer})
-
-        this.metricsApi.getMemoryUsage().then(metrics => console.log('Memory usage:', metrics))
-
-        // TODO should this be split?
-        console.log('Inserting csv rows: ' + rows.length)
-        this.documentRecords.insertMany(rows)
-            .then(() => {
-                console.log('  Csv rows inserted: ' + rows.length)
-                documentEvents.add(document)
-            })
-            .catch(err => console.log('  Error inserting rows', err))
-
-        return document
+        return Object.values(result.insertedIds).map(id => id.toString())
     }
 
-    async addCorrectedCsvDocument(input: CsvUpdatedDocumentInputModel, file: FileInfo): Promise<CsvDocumentModel> {
-        console.log('Uploading updated CSV file to database')
-        const filename = await this.uploadUpdatedCsvFile(file, input);
+    async insertCsvPredictionRecords(records: CsvPredictionCorrectionModel[]): Promise<string[]> {
+        const result = await this.predictionCorrectionRecords.insertMany(records)
 
-        const rows: CsvPredictionCorrectionModel[] = await parsePredictionRows(input, file)
-
-        const originalPredictionRecords: PaginationResultModel<CsvPredictionResultModel> = await this.listPredictionRecords(input.predictionId, {page: 1, pageSize: -1})
-
-        const changedRows: CsvPredictionCorrectionModel[] = rows.filter((row: CsvPredictionCorrectionModel) => {
-            const originalRecord = first(originalPredictionRecords.data.filter(record => record.id === row.predictionRecordId))
-
-            if (originalRecord.notPresent()) {
-                console.log('  Unable to find original prediction record: ' + row.predictionRecordId)
-                return false
-            }
-
-            return !defaultCompareFn(originalRecord.map(val => val.predictionValue).get(), row.predictionValue)
-        })
-
-        if (changedRows.length === 0) {
-            console.log('  No changed rows found! Nothing to store')
-            return undefined
-        } else {
-            console.log('  Found changed rows: ' + changedRows.length)
-        }
-
-        await this.predictionCorrectionRecords.insertMany(changedRows)
-
-        return undefined
+        return Object.values(result.insertedIds).map(id => id.toString())
     }
 
-    private uploadDocumentFile(file: { filename: string; buffer: Buffer }, document: CsvDocumentModel): Promise<string | undefined> {
+    async uploadDocumentFile(file: { filename: string; buffer: Buffer }, document: CsvDocumentModel): Promise<{stream: Stream, filename: string}> {
         console.log('Getting extension for filename: ' + document.name)
         const extension = extname(document.name)
 
-        return new Promise<string | undefined>((resolve, reject) => {
+        const fileId = await new Promise<string | undefined>((resolve, reject) => {
             const filename = `${document.id}-original${extension}`
 
             bufferToStream(file.buffer)
@@ -208,9 +159,11 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
                 .on('finish', () => resolve(filename))
                 .on('error', err => reject(err))
         })
+
+        return {stream: this.bucket.openDownloadStreamByName(fileId), filename: document.name}
     }
 
-    private uploadUpdatedCsvFile(file: { filename: string; buffer: Buffer }, document: CsvUpdatedDocumentInputModel): Promise<string | undefined> {
+    async uploadUpdatedCsvFile(file: { filename: string; buffer: Buffer }, document: CsvUpdatedDocumentInputModel): Promise<string | undefined> {
         return new Promise<string | undefined>((resolve, reject) => {
             const filename = `${document.documentId}-${document.predictionId}-update.csv`
 
@@ -228,7 +181,7 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
         })
     }
 
-    private async insertCsvDocument(input: CsvDocumentInputModel): Promise<CsvDocumentModel> {
+    async insertCsvDocument(input: CsvDocumentInputModel): Promise<CsvDocumentModel> {
         const document: InternalCsvDocumentModel = Object.assign(
             {},
             input,
@@ -290,12 +243,12 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
 
         await this.documents
             .updateOne({_id: new ObjectId(documentId)}, {$set: {status: CsvDocumentStatus.Completed}})
-            .then(() => documentEvents.update({id: documentId}))
+            .then(() => this.documentEvents.update({id: documentId}))
 
-        return predictionEvents.add(csvPrediction);
+        return this.predictionEvents.add(csvPrediction);
     }
 
-    private async insertCsvPrediction(prediction: CsvDocumentPredictionResult, documentId: string): Promise<CsvPredictionModel> {
+    async insertCsvPrediction(prediction: CsvDocumentPredictionResult, documentId: string): Promise<CsvPredictionModel> {
         const mongoPrediction: MongodbCsvPredictionModel = predictionToMongodbPrediction(prediction, documentId)
 
         const result = await this.predictions.insertOne(mongoPrediction)
@@ -334,7 +287,7 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
         return await this.calculateSummaryMatrix(predictionIds)
     }
 
-    private async calculateSummaryMatrix(predictionIds: string[]): Promise<PredictionPerformanceSummaryModel[]> {
+    async calculateSummaryMatrix(predictionIds: string[]): Promise<PredictionPerformanceSummaryModel[]> {
         // {$match: {predictionId: {$in: ids}}},
         // {$group: {_id: "$predictionId", count: {$sum: 1}}}
 
@@ -407,6 +360,7 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
                 }
             ])
             .toArray())
+            .map(val => val as SummaryFacet)
             .orElseThrow(() => new Error('Performance summary results missing'))
 
         console.log('Summary result: ', result)
@@ -491,11 +445,11 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
         const result = await this.documents
             .updateOne(new ObjectId(id), {$set: {status: CsvDocumentStatus.Deleted}})
 
-        return documentEvents.delete({id: result.upsertedId.toString()})
+        return this.documentEvents.delete({id: result.upsertedId.toString()})
     }
 
     observeCsvDocumentUpdates(): Observable<CsvDocumentEventModel> {
-        return documentEvents.observable();
+        return this.documentEvents.observable();
     }
 
     async listPredictionRecords(predictionId: string, {page, pageSize}: PaginationInputModel, {filter}: CsvPredictionRecordOptionsModel = {}): Promise<PaginationResultModel<CsvPredictionResultModel>> {
@@ -796,7 +750,7 @@ export class CsvDocumentMongodb implements CsvDocumentApi {
     }
 
     observeCsvPredictionUpdates(): Observable<{action: CsvDocumentEventAction, target: CsvPredictionModel}> {
-        return predictionEvents.observable();
+        return this.predictionEvents.observable();
     }
 }
 

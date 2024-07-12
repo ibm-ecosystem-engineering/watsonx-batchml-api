@@ -24,6 +24,7 @@
   "dependencies": {
     "@apollo/server": "^4.9.2",
     "@fast-csv/format": "^5.0.0",
+    "@ibm-cloud/cloudant": "^0.10.0",
     "@nestjs/apollo": "^12.0.7",
     "@nestjs/common": "^10.0.0",
     "@nestjs/core": "^10.0.0",
@@ -39,6 +40,7 @@
     "mongodb": "^6.4.0",
     "reflect-metadata": "^0.1.13",
     "rxjs": "^7.8.1",
+    "stream-transform": "^3.3.2",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.2/xlsx-0.20.2.tgz"
   },
   "devDependencies": {
