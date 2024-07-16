@@ -3,19 +3,25 @@ import {extname} from 'path';
 import {PassThrough, Stream} from 'stream';
 import {Observable, Subject} from "rxjs";
 import {read as readXls, utils as xlsUtils} from "xlsx";
+import {transform, Transformer} from 'stream-transform';
 
 import {
-    CsvDocumentEventAction, CsvDocumentModel,
+    CsvDocumentEventAction,
+    CsvDocumentModel,
     CsvDocumentRecordModel,
     CsvPredictionCorrectionModel,
     CsvPredictionResultModel,
     PerformanceSummaryModel,
     PredictionPerformanceSummaryModel
 } from "../../models";
+import {PubSubApi} from "../pub-sub";
 
 export type FileInfo = {filename: string, buffer: Buffer}
+export type FileInfoStream = {filename: string, buffer?: Buffer, stream?: Stream}
 export type FileMetadata = {sheetName: string, start: number}
 type FileHandler = (file: FileInfo, metadata?: FileMetadata) => Promise<CsvDocumentRecordModel[]>
+type FileStreamer = (file: FileInfoStream, metadata?: FileMetadata) => Promise<Stream>
+
 
 const excelFileHandler = async ({filename, buffer}: FileInfo, inputMetadata?: FileMetadata): Promise<CsvDocumentRecordModel[]> => {
 
@@ -40,11 +46,64 @@ const excelFileHandler = async ({filename, buffer}: FileInfo, inputMetadata?: Fi
     return await parseCsv(Buffer.from(csvValues))
 }
 
+const excelFileStreamer = async ({filename, buffer, stream}: FileInfoStream, inputMetadata?: FileMetadata): Promise<Stream> => {
+
+    const workbook = readXls(buffer)
+
+    const {sheetName, start}: FileMetadata = inputMetadata || {sheetName: '', start: 0}
+
+    if (!sheetName) {
+        console.log('Unable to identify worksheet for file: ' + filename)
+        throw new Error('Unable to identify worksheet for file: ' + filename)
+    }
+
+    console.log('Getting data from sheet: ' + sheetName)
+    const worksheet = workbook.Sheets[sheetName]
+
+    let csvValues: string = xlsUtils.sheet_to_csv(worksheet)
+
+    csvValues = csvValues.split('\n').slice(start).join('\n')
+
+    console.log('Headers: ', csvValues.split('\n')[0])
+
+    return streamCsv({filename, buffer: Buffer.from(csvValues)})
+}
+
 const fileHandlers: {[key: string]: FileHandler} = {
     '.csv': async (file: FileInfo): Promise<CsvDocumentRecordModel[]> => parseCsv(file.buffer),
     '.xlsx': excelFileHandler,
     '.xlsb': excelFileHandler,
     '.xlsm': excelFileHandler,
+}
+
+const fileStreamers: {[key: string]: FileStreamer} = {
+    '.csv': async (file: FileInfoStream): Promise<Stream> => streamCsv(file),
+    '.xlsx': excelFileStreamer,
+    '.xlsb': excelFileStreamer,
+    '.xlsm': excelFileStreamer,
+}
+
+export const streamDocumentRows = async (document: CsvDocumentModel, file: FileInfoStream): Promise<Stream> => {
+
+    const extension = extname(file.filename)
+
+    const fileStreamer: FileStreamer | undefined = fileStreamers[extension]
+
+    if (!fileStreamer) {
+        console.log('Unable to find file streamer for extension: ' + extension)
+        throw new Error('Unknown file extension: ' + extension)
+    }
+
+    const metadata: FileMetadata = {sheetName: document.worksheetName || '', start: parseInt(document.worksheetStartRow) || 0}
+
+    // parse csv file
+    const stream: Stream = await fileStreamer(file, metadata)
+
+    const transformer: Transformer = transform(function(data) {
+        return Object.assign({}, data, {documentId: document.id, data: JSON.stringify(data)});
+    });
+
+    return stream.pipe(transformer)
 }
 
 export const parseDocumentRows = async (document: CsvDocumentModel, file: FileInfo): Promise<CsvDocumentRecordModel[]> => {
@@ -89,6 +148,19 @@ export const parseCsv = async <T>(csvContents: Buffer): Promise<T[]> => {
     });
 
     return parseCsvStream<T>(parser, bufferToStream(csvContents))
+}
+
+export const streamCsv = async <T>(file: FileInfoStream): Promise<Stream> => {
+    const parser = parse({
+        delimiter: ',',
+        columns: (headers: string[]) => headers.map(val => val.trim()),
+        skip_empty_lines: true,
+    });
+
+    const stream = file.stream ? file.stream : bufferToStream(file.buffer)
+
+    console.log('Piping stream to parser')
+    return stream.pipe(parser)
 }
 
 export const bufferToStream = (buffer: Buffer): Stream => {
@@ -146,7 +218,7 @@ export class PerformanceSummary implements PredictionPerformanceSummaryModel {
         this.agreeBelowThreshold = agreeBelowThreshold || 0;
         this.disagreeAboveThreshold = disagreeAboveThreshold || 0;
         this.disagreeBelowThreshold = disagreeBelowThreshold || 0;
-        this.confidenceThreshold = confidenceThreshold || 0.8;
+        this.confidenceThreshold = confidenceThreshold || 0.75;
         this.correctedRecords = correctedRecords || 0;
         this.predictionId = predictionId;
     }
@@ -197,8 +269,8 @@ export class PerformanceSummary implements PredictionPerformanceSummaryModel {
 export class EventManager<T extends {id: string}> {
     private readonly subject: Subject<{action: CsvDocumentEventAction, target: T}>
 
-    constructor() {
-        this.subject = new Subject()
+    constructor(service: PubSubApi, topic: string) {
+        this.subject = service.registerTopic<{action: CsvDocumentEventAction, target: T}>(topic)
     }
 
     add(target: T): T {
@@ -242,6 +314,10 @@ const convertString = (value: unknown) => {
 }
 
 export const convertValue = (value: unknown): unknown => {
+    if (value === '') {
+        return 'Blank'
+    }
+
     const num = parseFloat(value as string)
 
     if (isNaN(num)) {
@@ -257,7 +333,16 @@ export const convertValue = (value: unknown): unknown => {
 }
 
 export const defaultCompareFn: CompareFn = (prediction: unknown, provided: unknown): boolean => {
-    const result = convertValue(prediction) == convertValue(provided)
+
+    const compare = (a: unknown, b: unknown): boolean => {
+        if ((a === 'Blank' || a === 0) && (b === 'Blank' || b === 0)) {
+            return true
+        }
+
+        return a == b
+    }
+
+    const result = compare(convertValue(prediction), convertValue(provided))
 
     const buildReport = (value: unknown) => {
         const convertedValue = convertValue(value)

@@ -7,6 +7,7 @@ export interface AIModelModel {
     name: string;
     deploymentId: string;
     description?: string;
+    default?: boolean;
     inputs: InputField[]
     label: string
 }
@@ -14,9 +15,10 @@ export interface AIModelModel {
 export type AIModelInputFormatter = <T> (data: T, fields: InputField[], currentField: InputField) => string
 
 export interface AIModelInputModel {
-    name: string;
-    aliases?: string[],
+    name: string
+    aliases?: string[]
     formatter?: AIModelInputFormatter
+    formatterName?: string
 }
 
 export const isAIModelInputModel = (value: unknown): value is AIModelInputModel => {

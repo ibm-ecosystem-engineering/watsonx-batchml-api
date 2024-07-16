@@ -24,12 +24,14 @@ export class CsvDocumentProcessor implements CsvDocumentProcessorApi {
     }
 
     async handleDocumentEvent(event: CsvDocumentEventModel): Promise<boolean> {
+        console.log('Got event: ', event)
         if (event.action !== CsvDocumentEventAction.Add) {
             return false
         }
 
-        const models: string[] = await this.modelService.listAIModels()
-            .then((result: AIModelModel[]) => result.map(val => val.name))
+        const models: string[] = await this.modelService.getDefaultModel()
+            .then((result: AIModelModel) => result.name)
+            .then((name: string) => [name])
 
         console.log(`   *** Processing new CSV Document: ${event.target.id}, ${models} ***`)
         return Promise.all(models.map((model: string) => this.createCsvPrediction(event.target.id, model).then(() => true)))

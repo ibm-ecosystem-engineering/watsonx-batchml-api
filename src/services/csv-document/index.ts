@@ -5,6 +5,7 @@ import {CsvDocumentMongodb} from "./csv-document.mongodb";
 import {mongodbClient, MongodbConfig, mongodbConfig} from "../../backends";
 import {aiModelApi} from "../ai-model";
 import {metricsApi} from "../metrics";
+import {pubSubApi} from "../pub-sub";
 
 export * from './csv-document.api'
 export * from './csv-document.config'
@@ -24,7 +25,7 @@ export const csvDocumentApi = async (): Promise<CsvDocumentApi> => {
 
     console.log('  ** CsvDocumentApi: CsvDocumentMongodb')
     return _instance = new Promise(async (resolve) => {
-        resolve(new CsvDocumentMongodb(await mongodbClient(), await aiModelApi(), metricsApi()).init())
+        resolve(new CsvDocumentMongodb(await mongodbClient(), await aiModelApi(), metricsApi(), await pubSubApi()).init())
     })
 }
 

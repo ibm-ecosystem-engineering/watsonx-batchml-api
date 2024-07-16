@@ -31,13 +31,14 @@ export abstract class Optional<T> {
     abstract get(): T
     abstract orElse(val: T): T
     abstract orElseGet(fn: () => T): T
-    abstract orElseThrow(fn: () => Error)
+    abstract orElseThrow(fn: () => Error): T
 
     abstract filter(fn: (val: T) => boolean): Optional<T>
     abstract map<U>(fn: (val: T) => U): Optional<U>
     abstract flatMap<U>(fn: (val: T) => Optional<U>): Optional<U>
     abstract walk<U>(key: keyof T): Optional<U>
     abstract or(fn: () => Optional<T>): Optional<T>
+    abstract orIf(predicate: () => boolean, fn: () => Optional<T>): Optional<T>;
 
     abstract ifPresent(fn: (val: T) => void): Optional<T>
     abstract ifNotPresent(fn: () => void): Optional<T>
@@ -75,7 +76,7 @@ class OptionalImpl<T> implements Optional<T> {
         return this.isPresent() ? this.value : fn();
     }
 
-    orElseThrow(fn: () => Error) {
+    orElseThrow(fn: () => Error): T {
         if (this.isPresent()) {
             return this.value;
         }
@@ -148,6 +149,17 @@ class OptionalImpl<T> implements Optional<T> {
 
         return fn();
     }
+
+    orIf(predicate: () => boolean, fn: () => Optional<T>): Optional<T> {
+        if (this.isPresent()) {
+            return this;
+        }
+
+        return predicate() ? fn() : this;
+    }
 }
+
+export const optionalOf = <T> (value: T): Optional<T> => Optional.of(value)
+export const optionalOfNullable = <T> (value: T): Optional<T> => Optional.ofNullable(value)
 
 const empty: Optional<any> = new OptionalImpl(undefined)
