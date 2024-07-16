@@ -335,7 +335,7 @@ export const convertValue = (value: unknown): unknown => {
 export const defaultCompareFn: CompareFn = (prediction: unknown, provided: unknown): boolean => {
 
     const compare = (a: unknown, b: unknown): boolean => {
-        if (a === 'Blank' || b === 'Blank' || a === 0 || b === 0) {
+        if ((a === 'Blank' || a === 0) && (b === 'Blank' || b === 0)) {
             return true
         }
 
