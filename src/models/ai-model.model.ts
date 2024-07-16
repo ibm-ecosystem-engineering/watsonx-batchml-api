@@ -8,8 +8,9 @@ export interface AIModelModel {
     deploymentId: string;
     description?: string;
     default?: boolean;
-    inputs: InputField[]
-    label: string
+    inputs: InputField[];
+    label: string;
+    skipField?: string;
 }
 
 export type AIModelInputFormatter = <T> (data: T, fields: InputField[], currentField: InputField) => string

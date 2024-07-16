@@ -61,6 +61,9 @@ export class PerformanceSummary implements PerformanceSummaryModel {
     totalCount: number;
 
     @Field(() => Number)
+    grandTotal: number;
+
+    @Field(() => Number)
     confidenceThreshold: number;
 
     @Field(() => Number)
@@ -143,6 +146,8 @@ export class CsvPredictionResult implements CsvPredictionResultModel {
     predictionValue: string;
     @Field(() => Boolean, {nullable: true})
     agree: boolean;
+    @Field(() => Boolean, {nullable: true})
+    skip: boolean;
     @Field(() => Number)
     confidence: number;
     @Field({nullable: true})
@@ -153,6 +158,8 @@ export class CsvPredictionResult implements CsvPredictionResultModel {
 export class CsvPredictionRecordOptions implements CsvPredictionRecordOptionsModel {
     @Field(() => CsvPredictionRecordFilter)
     filter?: CsvPredictionRecordFilter
+    @Field(() => Boolean, {nullable: true})
+    excludeSkip?: boolean
 }
 
 @InputType({description: 'Pagination input'})

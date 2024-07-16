@@ -12,6 +12,7 @@ export interface BatchPredictionValue {
     providedValue?: string;
     prediction: string;
     confidence: number;
+    skipValue?: string;
 }
 
 export abstract class BatchPredictorApi {

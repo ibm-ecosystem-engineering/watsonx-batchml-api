@@ -89,6 +89,7 @@ export interface CsvPredictionResultModel {
     csvRecordId: string;
     providedValue?: string;
     predictionValue: string;
+    skip?: boolean;
     agree: boolean;
     confidence: number;
     data?: string;
@@ -108,6 +109,7 @@ export interface CsvPredictionCorrectionModel {
 // performance summary (e.g. number of agree/disagree, above/below confidence threshold
 export interface PerformanceSummaryModel {
     totalCount: number;
+    grandTotal: number;
     confidenceThreshold: number;
     agreeAboveThreshold: number;
     agreeBelowThreshold: number;
@@ -142,6 +144,7 @@ export enum CsvPredictionRecordFilter {
     All = 'All',
     AllDisagree = 'AllDisagree',
     AllBelowConfidence = 'AllBelowConfidence',
+    AgreeBelowConfidence = 'AgreeBelowConfidence',
     DisagreeAboveConfidence = 'DisagreeAboveConfidence',
     DisagreeBelowConfidence = 'DisagreeBelowConfidence'
 }

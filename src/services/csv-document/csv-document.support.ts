@@ -22,6 +22,7 @@ export type FileMetadata = {sheetName: string, start: number}
 type FileHandler = (file: FileInfo, metadata?: FileMetadata) => Promise<CsvDocumentRecordModel[]>
 type FileStreamer = (file: FileInfoStream, metadata?: FileMetadata) => Promise<Stream>
 
+export const defaultConfidenceThreshold: number = 0.75
 
 const excelFileHandler = async ({filename, buffer}: FileInfo, inputMetadata?: FileMetadata): Promise<CsvDocumentRecordModel[]> => {
 
@@ -204,6 +205,7 @@ export type StatAggregation = {predictionId: string, stat: keyof PerformanceSumm
 
 export class PerformanceSummary implements PredictionPerformanceSummaryModel {
     totalCount: number = 0;
+    grandTotal: number = 0;
     agreeAboveThreshold: number = 0;
     agreeBelowThreshold: number = 0;
     disagreeAboveThreshold: number = 0;
@@ -212,13 +214,14 @@ export class PerformanceSummary implements PredictionPerformanceSummaryModel {
     correctedRecords: number = 0;
     predictionId: string;
 
-    constructor({predictionId, confidenceThreshold, totalCount, agreeAboveThreshold, agreeBelowThreshold, disagreeBelowThreshold, disagreeAboveThreshold, correctedRecords}: Partial<PredictionPerformanceSummaryModel> = {}) {
+    constructor({predictionId, confidenceThreshold, totalCount, agreeAboveThreshold, agreeBelowThreshold, disagreeBelowThreshold, disagreeAboveThreshold, correctedRecords, grandTotal}: Partial<PredictionPerformanceSummaryModel> = {}) {
         this.totalCount = totalCount || 0;
+        this.grandTotal = grandTotal || 0;
         this.agreeBelowThreshold = agreeAboveThreshold || 0;
         this.agreeBelowThreshold = agreeBelowThreshold || 0;
         this.disagreeAboveThreshold = disagreeAboveThreshold || 0;
         this.disagreeBelowThreshold = disagreeBelowThreshold || 0;
-        this.confidenceThreshold = confidenceThreshold || 0.75;
+        this.confidenceThreshold = confidenceThreshold || defaultConfidenceThreshold;
         this.correctedRecords = correctedRecords || 0;
         this.predictionId = predictionId;
     }
@@ -255,6 +258,7 @@ export class PerformanceSummary implements PredictionPerformanceSummaryModel {
     toModel(): PredictionPerformanceSummaryModel {
         return {
             totalCount: this.totalCount,
+            grandTotal: this.grandTotal,
             agreeBelowThreshold: this.agreeBelowThreshold,
             agreeAboveThreshold: this.agreeAboveThreshold,
             disagreeBelowThreshold: this.disagreeBelowThreshold,
