@@ -33,7 +33,7 @@
     "@nestjs/swagger": "^7.3.0",
     "csv-parse": "^5.5.5",
     "dotenv": "^16.4.5",
-    "graphql": "^16.8.0",
+    "graphql": "^16.9.0",
     "graphql-subscriptions": "^2.0.0",
     "graphql-ws": "^5.14.0",
     "ibm-cloud-sdk-core": "^4.2.4",
