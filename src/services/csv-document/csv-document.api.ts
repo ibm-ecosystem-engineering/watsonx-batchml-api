@@ -37,6 +37,7 @@ export interface CsvDocumentPredictionResult {
 
 export interface CsvPredictionRecordOptionsModel {
     filter?: CsvPredictionRecordFilter
+    excludeSkip?: boolean
 }
 
 export const TOPIC_CSV_DOCUMENT = 'csvDocumentEvent'

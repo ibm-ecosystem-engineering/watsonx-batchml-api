@@ -1,0 +1,15 @@
+
+mongodb:
+  connectString: ""
+  username: ""
+  password: ""
+  databaseName: "ibmclouddb"
+  certificateBase64: ""
+
+wml:
+  apiKey: ""
+  endpoint: ""
+  identityUrl: "https://iam.cloud.ibm.com/identity/token"
+  version: "2021-05-01"
+  defaultDeploymentId: "tax_withholding_v6a"
+  defaultDeploymentFields: "[]"

@@ -15,6 +15,8 @@ export class AiModel implements AIModelModel {
     default?: boolean;
     @Field()
     label: string;
+    @Field({nullable: true})
+    skipField?: string;
     @Field(() => [AIModelInput])
     inputs: AIModelInputModel[];
 }

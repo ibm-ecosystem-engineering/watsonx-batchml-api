@@ -18,6 +18,7 @@ type AiModel {
   inputs: [AIModelInput!]!
   label: String!
   name: String!
+  skipField: String
 }
 
 """CSV Document"""
@@ -83,6 +84,7 @@ type CsvPredictionCorrection {
 
 """Filter for csv prediction records"""
 enum CsvPredictionRecordFilter {
+  AgreeBelowConfidence
   All
   AllBelowConfidence
   AllDisagree
@@ -92,6 +94,7 @@ enum CsvPredictionRecordFilter {
 
 """CSV Prediction Result"""
 input CsvPredictionRecordOptions {
+  excludeSkip: Boolean
   filter: CsvPredictionRecordFilter!
 }
 
@@ -106,6 +109,7 @@ type CsvPredictionResult {
   predictionId: String!
   predictionValue: String!
   providedValue: String
+  skip: Boolean
 }
 
 type Mutation {
@@ -153,6 +157,7 @@ type PerformanceSummary {
   correctedRecords: Float!
   disagreeAboveThreshold: Float!
   disagreeBelowThreshold: Float!
+  grandTotal: Float!
   totalCount: Float!
 }
 

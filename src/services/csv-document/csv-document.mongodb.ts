@@ -9,7 +9,7 @@ import {CsvDocumentApi, CsvDocumentPredictionResult, CsvPredictionRecordOptionsM
 import {
     bufferToStream,
     CompareFn,
-    defaultCompareFn,
+    defaultCompareFn, defaultConfidenceThreshold,
     PerformanceSummary,
     StatAggregation,
 } from "./csv-document.support";
@@ -46,8 +46,6 @@ interface InternalCsvDocumentModel extends CsvDocumentInputModel {
     originalUrl: string;
 }
 
-const confidenceThreshold: number = 0.75
-
 type MongodbCsvPredictionModel = OptionalId<Omit<CsvPredictionModel, 'id | predictions | performanceSummary | date'> & {date: Date}>
 type MongodbCsvPredictionResultModel = OptionalId<CsvPredictionResultModel>
 
@@ -64,6 +62,7 @@ const summaryPipeline = (ids: string[], match: Partial<{[key in keyof CsvPredict
 
 interface SummaryFacet {
     totalCount: number[],
+    grandTotal: number[],
     agreeAboveThreshold: number[],
     agreeBelowThreshold: number[],
     disagreeAboveThreshold: number[],
@@ -119,6 +118,10 @@ export class CsvDocumentMongodb extends CsvDocumentAbstract<CsvDocumentMongodb> 
             .catch(err => console.log('Error creating index: predictionRecords-agree-confidence', err))
         await this.predictionRecords.createIndex({predictionId: 1, agree: 1, confidence: -1}, {name: 'predictionRecords-predictionId-agree-confidence'})
             .catch(err => console.log('Error creating index: predictionRecords-predictionId-agree-confidence', err))
+        await this.predictionRecords.createIndex({skip: 1, agree: 1, confidence: -1}, {name: 'predictionRecords-skip-agree-confidence'})
+            .catch(err => console.log('Error creating index: predictionRecords-skip-agree-confidence', err))
+        await this.predictionRecords.createIndex({predictionId: 1, skip: 1, agree: 1, confidence: -1}, {name: 'predictionRecords-predictionId-skip-agree-confidence'})
+            .catch(err => console.log('Error creating index: predictionRecords-predictionId-skip-agree-confidence', err))
 
         await this.predictionCorrectionRecords.createIndex({documentId: 1}, {name: 'predictionCorrectionRecords-documentId'})
             .catch(err => console.log('Error creating index: predictionRecords-documentId', err))
@@ -291,6 +294,9 @@ export class CsvDocumentMongodb extends CsvDocumentAbstract<CsvDocumentMongodb> 
         // {$match: {predictionId: {$in: ids}}},
         // {$group: {_id: "$predictionId", count: {$sum: 1}}}
 
+        // TODO this should come from somewhere
+        const confidenceThreshold: number = defaultConfidenceThreshold
+
         let page: number = 0;
         const limit: number = 50000;
         let results: StatAggregation[] = []
@@ -330,6 +336,9 @@ export class CsvDocumentMongodb extends CsvDocumentAbstract<CsvDocumentMongodb> 
     async getPredictionSummaryDocument(predictionIds: string[], page: number, limit: number): Promise<{stats: StatAggregation[], more: boolean}> {
         console.log('Getting prediction summary document: ', {predictionIds, page, limit})
 
+        // TODO this value should come from somewhere
+        const confidenceThreshold: number = defaultConfidenceThreshold
+
         const result: SummaryFacet = first(await this.predictionRecords
             .aggregate([
                 {
@@ -337,23 +346,27 @@ export class CsvDocumentMongodb extends CsvDocumentAbstract<CsvDocumentMongodb> 
                 },
                 {
                     $facet: {
+                        grandTotal: [
+                            {$group: {_id: "$predictionId", count: {$sum: 1}}}
+                        ],
                         totalCount: [
+                            {$match: {skip: {$ne: true}}},
                             {$group: {_id: "$predictionId", count: {$sum: 1}}}
                         ],
                         agreeAboveThreshold: [
-                            {$match: {agree: true, confidence: {$gte: confidenceThreshold}}},
+                            {$match: {skip: {$ne: true}, agree: true, confidence: {$gte: confidenceThreshold}}},
                             {$group: {_id: "$predictionId", count: {$sum: 1}}}
                         ],
                         agreeBelowThreshold: [
-                            {$match: {agree: true, confidence: {$lt: confidenceThreshold}}},
+                            {$match: {skip: {$ne: true}, agree: true, confidence: {$lt: confidenceThreshold}}},
                             {$group: {_id: "$predictionId", count: {$sum: 1}}}
                         ],
                         disagreeAboveThreshold: [
-                            {$match: {agree: false, confidence: {$gte: confidenceThreshold}}},
+                            {$match: {skip: {$ne: true}, agree: false, confidence: {$gte: confidenceThreshold}}},
                             {$group: {_id: "$predictionId", count: {$sum: 1}}}
                         ],
                         disagreeBelowThreshold: [
-                            {$match: {agree: false, confidence: {$lt: confidenceThreshold}}},
+                            {$match: {skip: {$ne: true}, agree: false, confidence: {$lt: confidenceThreshold}}},
                             {$group: {_id: "$predictionId", count: {$sum: 1}}}
                         ]
                     }
@@ -452,11 +465,13 @@ export class CsvDocumentMongodb extends CsvDocumentAbstract<CsvDocumentMongodb> 
         return this.documentEvents.observable();
     }
 
-    async listPredictionRecords(predictionId: string, {page, pageSize}: PaginationInputModel, {filter}: CsvPredictionRecordOptionsModel = {}): Promise<PaginationResultModel<CsvPredictionResultModel>> {
+    async listPredictionRecords(predictionId: string, {page, pageSize}: PaginationInputModel, {filter, excludeSkip}: CsvPredictionRecordOptionsModel = {}): Promise<PaginationResultModel<CsvPredictionResultModel>> {
+
+        const confidenceThreshold: number = defaultConfidenceThreshold
 
         const query: Partial<{[k in keyof CsvPredictionResultModel]: unknown}> = {predictionId}
 
-        if (filter === CsvPredictionRecordFilter.DisagreeBelowConfidence || filter === CsvPredictionRecordFilter.AllBelowConfidence) {
+        if (filter === CsvPredictionRecordFilter.DisagreeBelowConfidence || filter === CsvPredictionRecordFilter.AllBelowConfidence || filter === CsvPredictionRecordFilter.AgreeBelowConfidence) {
             query['confidence'] = {$lt: confidenceThreshold}
         } else if (filter === CsvPredictionRecordFilter.DisagreeAboveConfidence) {
             query['confidence'] = {$gte: confidenceThreshold}
@@ -464,6 +479,12 @@ export class CsvDocumentMongodb extends CsvDocumentAbstract<CsvDocumentMongodb> 
 
         if (filter === CsvPredictionRecordFilter.AllDisagree || filter === CsvPredictionRecordFilter.DisagreeBelowConfidence || filter === CsvPredictionRecordFilter.DisagreeAboveConfidence) {
             query['agree'] = false
+        } else if (filter === CsvPredictionRecordFilter.AgreeBelowConfidence) {
+            query['agree'] = true
+        }
+
+        if (excludeSkip) {
+            query['skip'] = {$ne: true}
         }
 
         console.log('Querying prediction records: ', {filter, query, page, pageSize})
@@ -786,6 +807,7 @@ const predictionResultToMongodbPredictionResult = (documentId: string, predictio
         confidence: result.confidence,
         providedValue: result.providedValue,
         agree: compareFn(result.prediction, result.providedValue),
+        skip: !!result.skipValue,
         csvRecordId: result.csvRecordId,
         documentId,
         predictionId,

@@ -55,6 +55,8 @@ export class PerformanceSummary implements PerformanceSummaryModel {
     @ApiProperty()
     totalCount: number;
     @ApiProperty()
+    grandTotal: number;
+    @ApiProperty()
     agreeBelowThreshold: number;
     @ApiProperty()
     disagreeAboveThreshold: number;

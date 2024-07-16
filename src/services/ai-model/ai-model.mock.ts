@@ -23,7 +23,8 @@ const _models: AIModelModel[] = [{
             formatterName: 'fullDescriptionUniqueFormatter'
         }
     ],
-    label: "WHT_PER"
+    label: "WHT_PER",
+    skipField: "To stop",
 }]
 
 let _id: number = _models.length

@@ -19,6 +19,7 @@ export interface PredictionValue {
     providedValue?: string;
     prediction: string;
     confidence: number;
+    skipValue?: string;
 }
 
 export interface PredictionResponse<T = any> {
@@ -42,6 +43,7 @@ interface DeploymentConfig {
     deploymentId: string;
     deploymentFields: DeploymentFieldType[];
     label: string;
+    skipField?: string;
 }
 
 const isDeploymentField = (value: unknown): value is DeploymentField => {
@@ -84,7 +86,9 @@ export class WatsonxMl {
     }
 
     async predict<T>(input: PredictionInput<T>, deployment?: string): Promise<PredictionResponse<T>> {
-        const {deploymentId, deploymentFields, label} = await this.getDeployment(deployment)
+        const {deploymentId, deploymentFields, label, skipField} = await this.getDeployment(deployment)
+
+        console.log('Predicting values from model: ', {deploymentId, deploymentFields, label, skipField})
 
         const client = await this.getClient()
 
@@ -93,7 +97,7 @@ export class WatsonxMl {
             .then(result => {
                 return result.data.predictions
             })
-            .then(predictionResultToPredictionValues(input, label))
+            .then(predictionResultToPredictionValues(input, label, skipField))
             .then((data: PredictionValue[]) => {
                 return {
                     model: deploymentId,
@@ -113,7 +117,8 @@ export class WatsonxMl {
         const deploymentFromAIModel = (result: AIModelModel): DeploymentConfig => ({
             deploymentId: result.deploymentId,
             deploymentFields: result.inputs,
-            label: result.label
+            label: result.label,
+            skipField: result.skipField,
         })
 
         if (deployment) {
@@ -166,16 +171,23 @@ const calculateConfidence = (probability: number[]): number => {
     return first(probability.sort((a, b) => b - a)).orElse(0)
 }
 
-const predictionResultToPredictionValues = <T> (input: PredictionInput<T>, label: string) => {
+const predictionResultToPredictionValues = <T> (input: PredictionInput<T>, label: string, skipField?: string) => {
 
     return (payload: PredictionPayloadData[]): PredictionValue[] => {
         return payload.reduce((result: PredictionValue[], current: PredictionPayloadData) => {
 
-            const values: PredictionValue[] = current.values.map((val: string[], currentIndex: number) => ({
-                providedValue: input.data[currentIndex][label],
-                prediction: val[0],
-                confidence: calculateConfidence(val[1] as unknown as number[])
-            }))
+            const values: PredictionValue[] = current.values.map((val: string[], currentIndex: number) => {
+                if (currentIndex === 0) {
+                    console.log('Processing result: ', {fields: Object.keys(input.data[currentIndex]), skipField})
+                }
+
+                return {
+                    providedValue: input.data[currentIndex][label],
+                    skipValue: skipField ? input.data[currentIndex][skipField] : undefined,
+                    prediction: val[0],
+                    confidence: calculateConfidence(val[1] as unknown as number[])
+                }
+            })
 
             return result.concat(values)
         }, [])
