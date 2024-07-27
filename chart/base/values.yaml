@@ -6,11 +6,15 @@ base:
   runtime: nodejs
 
   image:
-    repository: bitnami/nginx
+    repository: quay.io/ibm_ecosystem_engineering/watsonx-batchml-api
     port: 3000
     probePath: /
     # Overrides the image tag whose default is the chart appVersion.
-    tag: ""
+    tag: v0.10.1
+
+  service:
+    type: ClusterIP
+    port: 80
 
   autoscaling:
     enabled: false
@@ -52,3 +56,12 @@ base:
     - secretRef:
         name: jaeger-access
         optional: true
+    - secretRef:
+        name: service-wml
+        optional: false
+      prefix: WML_
+    - secretRef:
+        name: service-mongodb
+        optional: false
+      prefix: MONGODB_
+
