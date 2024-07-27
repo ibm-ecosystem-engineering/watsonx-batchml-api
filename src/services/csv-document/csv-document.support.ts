@@ -15,6 +15,7 @@ import {
     PredictionPerformanceSummaryModel
 } from "../../models";
 import {PubSubApi} from "../pub-sub";
+import {streamToBuffer} from "../../util";
 
 export type FileInfo = {filename: string, buffer: Buffer}
 export type FileInfoStream = {filename: string, buffer?: Buffer, stream?: Stream}
@@ -49,7 +50,14 @@ const excelFileHandler = async ({filename, buffer}: FileInfo, inputMetadata?: Fi
 
 const excelFileStreamer = async ({filename, buffer, stream}: FileInfoStream, inputMetadata?: FileMetadata): Promise<Stream> => {
 
-    const workbook = readXls(buffer)
+    const data = buffer || await streamToBuffer(stream)
+
+    if (!data) {
+        console.log('Unable to get data for xls file: ' + filename)
+        throw new Error('Unable to get data for xls file: ' + filename)
+    }
+
+    const workbook = readXls(data)
 
     const {sheetName, start}: FileMetadata = inputMetadata || {sheetName: '', start: 0}
 
